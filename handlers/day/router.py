@@ -5,7 +5,7 @@ from handlers.day.habits import habit_callback
 from handlers.day.morning import morning_checkin
 from handlers.day.evening import start_evening_checkin
 
-from handlers.day.evening import handle_evening_text
+from database.users import can_do_checkin
 
 async def day_callback_router(
     update: Update,
@@ -37,7 +37,18 @@ async def day_callback_router(
 
     if data == "day_morning":
 
-        await query.answer()
+        user_id = update.effective_user.id
+
+        if not can_do_checkin(
+            user_id,
+            "morning"
+        ):
+
+            await query.answer(
+                "☀️ Ты уже проходил утренний чек-ин сегодня",
+                show_alert=True
+            )
+            return
 
         await morning_checkin(
             update,
@@ -52,7 +63,17 @@ async def day_callback_router(
 
     if data == "day_evening":
 
-        await query.answer()
+        user_id = update.effective_user.id
+
+        if not can_do_checkin(
+            user_id,
+            "evening"
+        ):
+            await query.answer(
+                "🌙 Ты уже проходил вечерний чек-ин сегодня",
+                show_alert=True
+            )
+            return
 
         await start_evening_checkin(
             update,
@@ -77,6 +98,26 @@ async def day_callback_router(
         )
 
         return
+    
+
+    # =====================================================
+    # ОТЛОЖИТЬ ЧЕК-ИН
+    # =====================================================
+
+    if data in {
+        "morning_later",
+        "evening_later",
+    }:
+
+        await query.answer()
+
+        await query.edit_message_text(
+            "👍 Хорошо.\n\n"
+            "Вернёмся к этому позже."
+        )
+
+        return
+
 
     # =====================================================
     # ПУСТЫЕ КНОПКИ

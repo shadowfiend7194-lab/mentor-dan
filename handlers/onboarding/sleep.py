@@ -12,6 +12,9 @@ from database.users import create_user
 
 from database.users import create_user, get_user
 
+from handlers.day.notifications import setup_day_notifications
+
+
 async def start_sleep_setup(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE
@@ -84,6 +87,17 @@ async def handle_sleep_time(
         return
 
     context.user_data["sleep_time"] = sleep_time
+
+
+
+
+    setup_day_notifications(
+        context,
+        update.effective_user.id,
+        context.user_data["wake_time"],
+        sleep_time
+    )
+
 
     # =====================================================
     # СОХРАНЯЕМ ПОЛЬЗОВАТЕЛЯ В БД

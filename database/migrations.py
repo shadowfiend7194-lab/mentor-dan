@@ -1,7 +1,6 @@
 from database.connection import get_connection
 
 
-
 # =========================================================
 # МИГРАЦИИ
 # =========================================================
@@ -12,9 +11,9 @@ def migrate():
     cursor = conn.cursor()
 
 
-    # -----------------------------------------------------
+    # =====================================================
     # HABITS
-    # -----------------------------------------------------
+    # =====================================================
 
     cursor.execute(
         """
@@ -43,9 +42,9 @@ def migrate():
         )
 
 
-    # -----------------------------------------------------
+    # =====================================================
     # HABIT LOGS
-    # -----------------------------------------------------
+    # =====================================================
 
     cursor.execute(
         """
@@ -68,52 +67,66 @@ def migrate():
         """
     )
 
-def migrate():
 
-    conn = get_connection()
-    cursor = conn.cursor()
+    # =====================================================
+    # USERS — РЕЖИМ ДНЯ
+    # =====================================================
+
+    user_fields = {
+
+        "wake_time":
+        "TEXT",
+
+        "sleep_time":
+        "TEXT",
+
+        "last_morning_checkin":
+        "TEXT",
+
+        "last_evening_checkin":
+        "TEXT",
+
+        "morning_notification_sent":
+        "TEXT",
+
+        "evening_notification_sent":
+        "TEXT",
+    }
+
 
     cursor.execute(
         """
-        PRAGMA table_info(habits)
+        PRAGMA table_info(users)
         """
     )
 
-    columns = [
+
+    user_columns = [
         row[1]
         for row in cursor.fetchall()
     ]
 
-    if "schedule_days" not in columns:
 
-        cursor.execute(
-            """
-            ALTER TABLE habits
-            ADD COLUMN schedule_days TEXT
-            """
-        )
+    for field, field_type in user_fields.items():
 
-        print("✅ Added schedule_days")
+        if field not in user_columns:
 
-    cursor.execute(
-        """
-        CREATE TABLE IF NOT EXISTS habit_logs (
+            cursor.execute(
+                f"""
+                ALTER TABLE users
+                ADD COLUMN {field} {field_type}
+                """
+            )
 
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            print(
+                f"✅ Added {field}"
+            )
 
-            habit_id INTEGER NOT NULL,
-
-            date TEXT NOT NULL,
-
-            completed INTEGER DEFAULT 0,
-
-            UNIQUE(habit_id, date)
-
-        )
-        """
-    )
 
     conn.commit()
     conn.close()
 
-    print("✅ Migration complete")
+
+    print(
+        "✅ Migration complete"
+    )

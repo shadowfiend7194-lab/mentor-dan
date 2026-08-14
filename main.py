@@ -7,8 +7,8 @@ from telegram.ext import (
 )
 
 from config import BOT_TOKEN
-from database.init import init_db
 
+from database.init import init_db
 from database.migrations import migrate
 
 from handlers.start import start
@@ -19,12 +19,25 @@ from handlers.onboarding.router import (
 )
 
 from handlers.day.router import day_callback_router
-
 from handlers.day.screen import show_day
 
 from handlers.goal.router import goal_callback_router
 
 from handlers.progress.router import progress_callback_router
+
+from handlers.settings import (
+    show_sleep_settings,
+    change_wake_time,
+    change_sleep_time,
+)
+
+from handlers.menu import (
+    menu_text,
+    show_menu,
+    show_settings,
+)
+
+from scheduler.notifications import check_notifications
 
 # =========================================================
 # ЗАПУСК БОТА
@@ -66,7 +79,18 @@ def main():
 
         .build()
     )
+    
+    
+    # =====================================================
+    # УВЕДОМЛЕНИЯ ДЭНА
+    # =====================================================
 
+    app.job_queue.run_repeating(
+        check_notifications,
+        interval=60,
+        first=10
+    )
+    
     # =====================================================
     # /START
     # =====================================================
@@ -126,7 +150,51 @@ def main():
         )
     )
     
+    app.add_handler(
+        CallbackQueryHandler(
+            show_sleep_settings,
+            pattern="^settings_sleep$"
+        )
+    )
     
+    
+    app.add_handler(
+        CallbackQueryHandler(
+            change_wake_time,
+            pattern="^change_wake_time$"
+        )
+    )
+
+
+    app.add_handler(
+        CallbackQueryHandler(
+            change_sleep_time,
+            pattern="^change_sleep_time$"
+        )
+    )
+
+    app.add_handler(
+        CallbackQueryHandler(
+            show_settings,
+            pattern="^back_to_settings$"
+        )
+    )
+
+
+    app.add_handler(
+        CallbackQueryHandler(
+            change_wake_time,
+            pattern="^change_wake_time$"
+        )
+    )
+
+
+    app.add_handler(
+        CallbackQueryHandler(
+            change_sleep_time,
+            pattern="^change_sleep_time$"
+        )
+    )
 
     app.add_handler(
     CallbackQueryHandler(

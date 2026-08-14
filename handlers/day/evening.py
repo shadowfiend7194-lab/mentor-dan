@@ -7,7 +7,7 @@ from telegram import (
 from telegram.ext import ContextTypes
 
 from database.checkins import save_checkin
-
+from database.users import update_checkin_date
 
 # =========================================================
 # СТАРТ ВЕЧЕРНЕГО ЧЕК-ИНА
@@ -337,6 +337,13 @@ async def finish_evening(
     await update.message.reply_text(
         result,
         reply_markup=ReplyKeyboardRemove()
+    )
+
+
+    # сохраняем факт вечернего чек-ина
+    update_checkin_date(
+        update.effective_user.id,
+        "evening"
     )
 
 

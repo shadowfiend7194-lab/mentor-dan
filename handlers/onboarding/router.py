@@ -218,8 +218,76 @@ async def text_router(
 
     if not update.message:
         return
+    
+    # =====================================================
+    # НАСТРОЙКИ — ИЗМЕНЕНИЕ ВРЕМЕНИ
+    # =====================================================
+
+    if context.user_data.get(
+        "settings_state"
+    ):
+
+        from handlers.settings import (
+            parse_time,
+        )
+
+        value = parse_time(
+            update.message.text.strip()
+        )
 
 
+        if value is None:
+
+            await update.message.reply_text(
+                "⏰ Напиши время в формате 08:30"
+            )
+
+            return
+
+
+        state = context.user_data.get(
+            "settings_state"
+        )
+
+
+        from database.users import (
+            update_sleep_settings,
+        )
+
+
+        if state == "wake_time":
+
+            update_sleep_settings(
+                update.effective_user.id,
+                wake_time=value
+            )
+
+
+        if state == "sleep_time":
+
+            update_sleep_settings(
+                update.effective_user.id,
+                sleep_time=value
+            )
+
+
+        context.user_data.pop(
+            "settings_state",
+            None
+        )
+
+
+        from handlers.settings import (
+            show_sleep_settings,
+        )
+
+
+        await show_sleep_settings(
+            update,
+            context
+        )
+
+        return
     # =====================================================
     # УТРЕННИЙ ЧЕК-ИН
     # =====================================================
