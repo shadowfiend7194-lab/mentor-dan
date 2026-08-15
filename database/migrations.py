@@ -10,7 +10,6 @@ def migrate():
     conn = get_connection()
     cursor = conn.cursor()
 
-
     # =====================================================
     # HABITS
     # =====================================================
@@ -21,12 +20,10 @@ def migrate():
         """
     )
 
-
     habit_columns = [
         row[1]
         for row in cursor.fetchall()
     ]
-
 
     if "schedule_days" not in habit_columns:
 
@@ -40,7 +37,6 @@ def migrate():
         print(
             "✅ Added schedule_days to habits"
         )
-
 
     # =====================================================
     # HABIT LOGS
@@ -67,9 +63,8 @@ def migrate():
         """
     )
 
-
     # =====================================================
-    # USERS — РЕЖИМ ДНЯ
+    # USERS
     # =====================================================
 
     user_fields = {
@@ -91,8 +86,13 @@ def migrate():
 
         "evening_notification_sent":
         "TEXT",
-    }
 
+        "morning_notifications_enabled":
+        "INTEGER DEFAULT 1",
+
+        "evening_notifications_enabled":
+        "INTEGER DEFAULT 1",
+    }
 
     cursor.execute(
         """
@@ -100,12 +100,10 @@ def migrate():
         """
     )
 
-
     user_columns = [
         row[1]
         for row in cursor.fetchall()
     ]
-
 
     for field, field_type in user_fields.items():
 
@@ -122,10 +120,8 @@ def migrate():
                 f"✅ Added {field}"
             )
 
-
     conn.commit()
     conn.close()
-
 
     print(
         "✅ Migration complete"

@@ -7,6 +7,7 @@ from telegram.ext import ContextTypes
 
 from database.checkins import save_checkin
 from database.users import update_checkin_date
+from database.checkin_history import save_checkin_status
 
 
 # =========================================================
@@ -171,7 +172,14 @@ async def morning_answer(
             morning_mood=mood,
             morning_stress=score,
         )
-        
+    
+
+        save_checkin_status(
+            user_id=update.effective_user.id,
+            checkin_type="morning",
+            completed=1
+        )
+
         update_checkin_date(
             update.effective_user.id,
             "morning"

@@ -7,6 +7,11 @@ from handlers.day.evening import start_evening_checkin
 
 from database.users import can_do_checkin
 
+from handlers.day.notifications import (
+    delay_morning_checkin,
+    delay_evening_checkin,
+)
+
 async def day_callback_router(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE
@@ -118,7 +123,33 @@ async def day_callback_router(
 
         return
 
+    # =====================================================
+    # ОТЛОЖИТЬ УТРО
+    # =====================================================
 
+    if data == "delay_morning_checkin":
+
+        await delay_morning_checkin(
+            update,
+           context
+        )
+
+        return
+
+
+    # =====================================================
+    # ОТЛОЖИТЬ ВЕЧЕР
+    # =====================================================
+
+    if data == "delay_evening_checkin":
+
+        await delay_evening_checkin(
+            update,
+            context
+        )
+
+        return
+        
     # =====================================================
     # ПУСТЫЕ КНОПКИ
     # =====================================================

@@ -191,7 +191,25 @@ def init_db():
         )
         """
     )
+    
 
+    cursor.execute(
+    """
+        CREATE TABLE IF NOT EXISTS checkin_history (
+
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+            user_id INTEGER NOT NULL,
+
+            type TEXT NOT NULL,
+
+            date TEXT NOT NULL,
+
+            completed INTEGER DEFAULT 0
+
+        )
+        """
+    )
 
     conn.commit()
     conn.close()

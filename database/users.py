@@ -3,7 +3,6 @@ from datetime import datetime
 from database.connection import get_connection
 
 
-
 # =========================================================
 # СОЗДАНИЕ ПОЛЬЗОВАТЕЛЯ
 # =========================================================
@@ -17,11 +16,9 @@ def create_user(
     conn = get_connection()
     cursor = conn.cursor()
 
-
     now = datetime.now().strftime(
         "%Y-%m-%d %H:%M:%S"
     )
-
 
     cursor.execute(
         """
@@ -43,10 +40,8 @@ def create_user(
         )
     )
 
-
     conn.commit()
     conn.close()
-
 
 
 # =========================================================
@@ -60,7 +55,6 @@ def get_user(
     conn = get_connection()
     cursor = conn.cursor()
 
-
     cursor.execute(
         """
         SELECT
@@ -71,7 +65,9 @@ def get_user(
             wake_time,
             sleep_time,
             last_morning_checkin,
-            last_evening_checkin
+            last_evening_checkin,
+            morning_notifications_enabled,
+            evening_notifications_enabled
 
         FROM users
 
@@ -82,12 +78,9 @@ def get_user(
         )
     )
 
-
     row = cursor.fetchone()
 
-
     conn.close()
-
 
     if not row:
         return None
@@ -102,7 +95,7 @@ def get_user(
         "age": row[2],
 
         "created_at": row[3],
-        
+
         "wake_time": row[4],
 
         "sleep_time": row[5],
@@ -110,8 +103,25 @@ def get_user(
         "last_morning_checkin": row[6],
 
         "last_evening_checkin": row[7],
+
+        "morning_notifications_enabled": (
+            True
+            if row[8] is None
+            else bool(row[8])
+        ),
+
+        "evening_notifications_enabled": (
+            True
+            if row[9] is None
+            else bool(row[9])
+        )
     }
 
+
+
+# =========================================================
+# ОБНОВИТЬ РЕЖИМ ДНЯ
+# =========================================================
 
 def update_sleep_settings(
     user_id,
@@ -131,7 +141,6 @@ def update_sleep_settings(
             sleep_time = COALESCE(?, sleep_time)
 
         WHERE user_id = ?
-
         """,
         (
             wake_time,
@@ -143,6 +152,53 @@ def update_sleep_settings(
     conn.commit()
     conn.close()
 
+
+
+# =========================================================
+# НАСТРОЙКИ УВЕДОМЛЕНИЙ
+# =========================================================
+
+def update_notification_settings(
+    user_id,
+    morning_enabled=None,
+    evening_enabled=None
+):
+
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    cursor.execute(
+        """
+        UPDATE users
+
+        SET
+
+        morning_notifications_enabled =
+        COALESCE(?, morning_notifications_enabled),
+
+        evening_notifications_enabled =
+        COALESCE(?, evening_notifications_enabled)
+
+        WHERE user_id = ?
+
+        """,
+        (
+            None if morning_enabled is None else int(morning_enabled),
+
+            None if evening_enabled is None else int(evening_enabled),
+
+            user_id
+        )
+    )
+
+    conn.commit()
+    conn.close()
+
+
+
+# =========================================================
+# ПРОВЕРКА ЧЕК-ИНА
+# =========================================================
 
 def can_do_checkin(
     user_id,
@@ -156,6 +212,7 @@ def can_do_checkin(
         "%Y-%m-%d"
     )
 
+
     field = (
         "last_morning_checkin"
         if checkin_type == "morning"
@@ -163,16 +220,21 @@ def can_do_checkin(
         "last_evening_checkin"
     )
 
+
     cursor.execute(
         f"""
         SELECT {field}
+
         FROM users
+
         WHERE user_id = ?
+
         """,
         (
             user_id,
         )
     )
+
 
     result = cursor.fetchone()
 
@@ -184,6 +246,95 @@ def can_do_checkin(
 
 
     return result[0] != today
+
+
+
+# =========================================================
+# СОХРАНИТЬ ДАТУ ЧЕК-ИНА
+# =========================================================
+
+def update_checkin_date(
+    user_id,
+    checkin_type
+):
+
+    conn = get_connection()
+    cursor = conn.cursor()
+
+
+    today = datetime.now().strftime(
+        "%Y-%m-%d"
+    )
+
+
+    field = (
+        "last_morning_checkin"
+        if checkin_type == "morning"
+        else
+        "last_evening_checkin"
+    )
+
+
+    cursor.execute(
+        f"""
+        UPDATE users
+
+        SET {field} = ?
+
+        WHERE user_id = ?
+
+        """,
+        (
+            today,
+            user_id
+        )
+    )
+
+
+    conn.commit()
+    conn.close()
+
+
+
+# =========================================================
+# СБРОС ОТПРАВКИ УВЕДОМЛЕНИЯ
+# =========================================================
+
+def reset_notification_sent(
+    user_id,
+    notification_type
+):
+
+    conn = get_connection()
+    cursor = conn.cursor()
+
+
+    field = (
+        "morning_notification_sent"
+        if notification_type == "morning"
+        else
+        "evening_notification_sent"
+    )
+
+
+    cursor.execute(
+        f"""
+        UPDATE users
+
+        SET {field} = NULL
+
+        WHERE user_id = ?
+
+        """,
+        (
+            user_id,
+        )
+    )
+
+
+    conn.commit()
+    conn.close()
+
 
 
 # =========================================================
@@ -225,7 +376,7 @@ def update_user(
 
 
 # =========================================================
-# ПРОВЕРКА СУЩЕСТВОВАНИЯ
+# СУЩЕСТВУЕТ ЛИ ПОЛЬЗОВАТЕЛЬ
 # =========================================================
 
 def user_exists(
@@ -239,8 +390,11 @@ def user_exists(
     cursor.execute(
         """
         SELECT 1
+
         FROM users
+
         WHERE user_id = ?
+
         """,
         (
             user_id,
@@ -250,80 +404,7 @@ def user_exists(
 
     result = cursor.fetchone()
 
-
     conn.close()
 
 
     return result is not None
-
-
-def update_checkin_date(
-    user_id,
-    checkin_type
-):
-
-    conn = get_connection()
-    cursor = conn.cursor()
-
-    today = datetime.now().strftime(
-        "%Y-%m-%d"
-    )
-
-    field = (
-        "last_morning_checkin"
-        if checkin_type == "morning"
-        else
-        "last_evening_checkin"
-    )
-
-    cursor.execute(
-        f"""
-        UPDATE users
-        SET {field} = ?
-        WHERE user_id = ?
-        """,
-        (
-            today,
-            user_id
-        )
-    )
-
-    conn.commit()
-    conn.close()
-
-    
-def update_checkin_date(
-    user_id,
-    checkin_type
-):
-
-    conn = get_connection()
-    cursor = conn.cursor()
-
-    today = datetime.now().strftime(
-        "%Y-%m-%d"
-    )
-
-    field = (
-        "last_morning_checkin"
-        if checkin_type == "morning"
-        else
-        "last_evening_checkin"
-    )
-
-    cursor.execute(
-        f"""
-        UPDATE users
-
-        SET {field} = ?
-
-        WHERE user_id = ?
-        """,
-        (
-            today,
-            user_id
-        )
-    )
-
-    conn.commit()
-    conn.close()

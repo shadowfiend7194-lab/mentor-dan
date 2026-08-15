@@ -7,6 +7,9 @@ from telegram import (
 
 from database.users import get_user
 
+from database.users import can_do_checkin
+
+
 
 # =====================================================
 # УТРЕННИЙ ЧЕК-ИН
@@ -30,14 +33,20 @@ async def send_morning_checkin(
     keyboard = [
         [
             InlineKeyboardButton(
-                "🌅 Утренний чек-ин",
+                "🌅 Пройти утренний чек-ин",
                 callback_data="day_morning"
             )
         ],
         [
             InlineKeyboardButton(
+                "⏰ Напомнить позже",
+                callback_data="delay_morning_checkin"
+            )
+        ],
+        [
+            InlineKeyboardButton(
                 "🏠 В меню",
-                callback_data="go_menu"
+                 callback_data="go_menu"
             )
         ]
     ]
@@ -54,6 +63,83 @@ async def send_morning_checkin(
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
+
+# =====================================================
+# ОТЛОЖИТЬ УТРЕННИЙ ЧЕК-ИН
+# =====================================================
+
+async def delay_morning_checkin(
+    update,
+    context
+):
+
+    query = update.callback_query
+
+    await query.answer(
+        "⏰ Хорошо, напомню через час"
+    )
+
+
+    for job in context.job_queue.get_jobs_by_name(
+        f"morning_reminder_{update.effective_user.id}"
+    ):
+        job.schedule_removal()
+
+
+    context.job_queue.run_once(
+        send_morning_reminder,
+        when=timedelta(hours=1),
+        chat_id=update.effective_user.id,
+        name=f"morning_reminder_{update.effective_user.id}"
+    )
+
+
+
+async def send_morning_reminder(context):
+
+    user_id = context.job.chat_id
+
+    if not can_do_checkin(
+        user_id,
+        "morning"
+    ):
+        return
+
+    user = get_user(user_id)
+
+    name = (
+        user["name"]
+        if user
+        else "друг"
+    )
+
+
+    keyboard = [
+        [
+            InlineKeyboardButton(
+                "🌅 Пройти чек-ин",
+                callback_data="day_morning"
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                "🏠 В меню",
+                callback_data="go_menu"
+            )
+        ]
+    ]
+
+
+    await context.bot.send_message(
+        chat_id=user_id,
+        text=(
+            f"☀️ {name}, возвращаюсь.\n\n"
+            "Когда будешь готов — "
+            "давай быстро оценим твоё состояние "
+            "и начнём день правильно."
+        ),
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
 
 
 # =====================================================
@@ -78,8 +164,14 @@ async def send_evening_checkin(
     keyboard = [
         [
             InlineKeyboardButton(
-                "🌙 Вечерний чек-ин",
+                "🌙 Пройти вечерний чек-ин",
                 callback_data="day_evening"
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                "⏰ Напомнить через час",
+                callback_data="delay_evening_checkin"
             )
         ],
         [
@@ -101,6 +193,88 @@ async def send_evening_checkin(
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
+# =====================================================
+# ОТЛОЖИТЬ ВЕЧЕРНИЙ ЧЕК-ИН
+# =====================================================
+
+async def delay_evening_checkin(
+    update,
+    context
+):
+
+    query = update.callback_query
+
+    await query.answer(
+        "⏰ Хорошо, напомню через час"
+    )
+
+
+    for job in context.job_queue.get_jobs_by_name(
+        f"morning_reminder_{update.effective_user.id}"
+    ):
+        job.schedule_removal()
+
+
+    context.job_queue.run_once(
+        send_morning_reminder,
+        when=timedelta(hours=1),
+        chat_id=update.effective_user.id,
+        name=f"morning_reminder_{update.effective_user.id}"
+    )
+
+
+
+async def send_evening_reminder(
+    context
+):
+
+    user_id = context.job.chat_id
+
+
+    # если уже прошёл — ничего не отправляем
+
+    if not can_do_checkin(
+        user_id,
+        "evening"
+    ):
+        return
+
+
+    user = get_user(user_id)
+
+    name = (
+        user["name"]
+        if user
+        else "друг"
+    )
+
+
+    keyboard = [
+        [
+            InlineKeyboardButton(
+                "🌙 Пройти чек-ин",
+                callback_data="day_evening"
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                "🏠 В меню",
+                callback_data="go_menu"
+            )
+        ]
+    ]
+
+
+    await context.bot.send_message(
+        chat_id=user_id,
+        text=(
+            f"🌙 {name}, возвращаюсь.\n\n"
+            "Если есть минутка — "
+            "давай завершим день "
+            "и зафиксируем результат."
+        ),
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
 
 
 # =====================================================

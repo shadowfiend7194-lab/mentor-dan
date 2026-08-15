@@ -29,6 +29,9 @@ from handlers.settings import (
     show_sleep_settings,
     change_wake_time,
     change_sleep_time,
+    show_notification_settings,
+    toggle_morning_notifications,
+    toggle_evening_notifications,
 )
 
 from handlers.menu import (
@@ -38,6 +41,10 @@ from handlers.menu import (
 )
 
 from scheduler.notifications import check_notifications
+
+from handlers.day.notifications import delay_morning_checkin
+
+from handlers.day.notifications import delay_evening_checkin
 
 # =========================================================
 # ЗАПУСК БОТА
@@ -195,6 +202,44 @@ def main():
             pattern="^change_sleep_time$"
         )
     )
+    
+
+    app.add_handler(
+        CallbackQueryHandler(
+            delay_morning_checkin,
+            pattern="^delay_morning_checkin$"
+        )
+    )
+    
+
+    app.add_handler(
+        CallbackQueryHandler(
+            delay_evening_checkin,
+            pattern="^delay_evening_checkin$"
+        )
+    )
+
+    app.add_handler(
+    CallbackQueryHandler(
+        show_notification_settings,
+        pattern="^settings_notifications$"
+    )
+    )
+
+    app.add_handler(
+        CallbackQueryHandler(
+            toggle_morning_notifications,
+            pattern="^toggle_morning_notifications$"
+        )
+    )
+
+    app.add_handler(
+        CallbackQueryHandler(
+            toggle_evening_notifications,
+            pattern="^toggle_evening_notifications$"
+        )
+    )
+
 
     app.add_handler(
     CallbackQueryHandler(

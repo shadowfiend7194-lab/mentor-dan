@@ -4,7 +4,7 @@ from database.connection import get_connection
 
 
 # =========================================================
-# ПРОВЕРКА УТРЕННИХ И ВЕЧЕРНИХ УВЕДОМЛЕНИЙ
+# ГЛАВНАЯ ПРОВЕРКА УВЕДОМЛЕНИЙ
 # =========================================================
 
 async def check_notifications(context):
@@ -21,7 +21,9 @@ async def check_notifications(context):
             wake_time,
             sleep_time,
             morning_notification_sent,
-            evening_notification_sent
+            evening_notification_sent,
+            morning_notifications_enabled,
+            evening_notifications_enabled
 
         FROM users
         """
@@ -30,14 +32,22 @@ async def check_notifications(context):
 
     users = cursor.fetchall()
 
-
     conn.close()
 
 
     now = datetime.now()
 
+    today = now.strftime("%Y-%m-%d")
+
+    current_minutes = (
+        now.hour * 60
+        +
+        now.minute
+    )
+
 
     for user in users:
+
 
         (
             user_id,
@@ -45,15 +55,22 @@ async def check_notifications(context):
             wake_time,
             sleep_time,
             morning_sent,
-            evening_sent
+            evening_sent,
+            morning_enabled,
+            evening_enabled
         ) = user
 
 
+
         # ===============================================
-        # УТРЕННИЙ ЧЕК-ИН
+        # УТРО
         # ===============================================
 
-        if wake_time:
+        if (
+            morning_enabled
+            and wake_time
+        ):
+
 
             wake = datetime.strptime(
                 wake_time,
@@ -61,31 +78,28 @@ async def check_notifications(context):
             )
 
 
-            notify_time = (
+            notify = (
                 wake
-                + timedelta(minutes=30)
+                +
+                timedelta(minutes=30)
             )
 
 
-            current_time = now.strftime(
-                "%H:%M"
+            notify_minutes = (
+                notify.hour * 60
+                +
+                notify.minute
             )
 
 
-            target_time = notify_time.strftime(
-                "%H:%M"
-            )
-
-
-            today = now.strftime(
-                "%Y-%m-%d"
-            )
-
+            # если время наступило
+            # и сегодня еще не отправляли
 
             if (
-                current_time == target_time
+                current_minutes >= notify_minutes
                 and morning_sent != today
             ):
+
 
                 await send_morning_checkin(
                     context,
@@ -93,17 +107,24 @@ async def check_notifications(context):
                     name
                 )
 
+
                 save_notification(
                     user_id,
                     "morning"
                 )
 
 
+
         # ===============================================
-        # ВЕЧЕРНИЙ ЧЕК-ИН
+        # ВЕЧЕР
         # ===============================================
 
-        if sleep_time:
+
+        if (
+            evening_enabled
+            and sleep_time
+        ):
+
 
             sleep = datetime.strptime(
                 sleep_time,
@@ -111,37 +132,32 @@ async def check_notifications(context):
             )
 
 
-            notify_time = (
+            notify = (
                 sleep
-                - timedelta(hours=1)
+                -
+                timedelta(hours=1)
             )
 
 
-            current_time = now.strftime(
-                "%H:%M"
-            )
-
-
-            target_time = notify_time.strftime(
-                "%H:%M"
-            )
-
-
-            today = now.strftime(
-                "%Y-%m-%d"
+            notify_minutes = (
+                notify.hour * 60
+                +
+                notify.minute
             )
 
 
             if (
-                current_time == target_time
+                current_minutes >= notify_minutes
                 and evening_sent != today
             ):
+
 
                 await send_evening_checkin(
                     context,
                     user_id,
                     name
                 )
+
 
                 save_notification(
                     user_id,
@@ -151,7 +167,7 @@ async def check_notifications(context):
 
 
 # =========================================================
-# ОТПРАВКА
+# УТРЕННЕЕ СООБЩЕНИЕ
 # =========================================================
 
 
@@ -161,42 +177,67 @@ async def send_morning_checkin(
     name
 ):
 
+
     from telegram import (
         InlineKeyboardButton,
-        InlineKeyboardMarkup,
+        InlineKeyboardMarkup
     )
 
 
     keyboard = [
+
         [
             InlineKeyboardButton(
                 "🌅 Пройти утренний чек-ин",
                 callback_data="day_morning"
             )
         ],
+
         [
             InlineKeyboardButton(
-                "⏳ Позже",
-                callback_data="morning_later"
+                "⏰ Напомнить через час",
+                callback_data="delay_morning_checkin"
             )
         ],
+
+        [
+            InlineKeyboardButton(
+                "🏠 В меню",
+                callback_data="go_menu"
+            )
+        ]
+
     ]
 
 
     await context.bot.send_message(
+
         chat_id=user_id,
+
         text=(
+
             f"☀️ Доброе утро, {name}!\n\n"
+
             "Новый день начинается.\n\n"
-            "Перед тем как погрузиться в дела — "
-            "оцени своё состояние.\n\n"
-            "Это займёт меньше минуты, "
-            "но поможет лучше понимать себя.\n\n"
-            "Готов пройти утренний чек-ин?"
+
+            "Перед делами удели минуту себе.\n"
+
+            "Оценим твоё состояние "
+            "и начнём день осознанно."
+
         ),
-        reply_markup=InlineKeyboardMarkup(keyboard)
+
+        reply_markup=InlineKeyboardMarkup(
+            keyboard
+        )
+
     )
 
+
+
+# =========================================================
+# ВЕЧЕРНЕЕ СООБЩЕНИЕ
+# =========================================================
 
 
 async def send_evening_checkin(
@@ -205,46 +246,64 @@ async def send_evening_checkin(
     name
 ):
 
+
     from telegram import (
         InlineKeyboardButton,
-        InlineKeyboardMarkup,
+        InlineKeyboardMarkup
     )
 
 
     keyboard = [
+
         [
             InlineKeyboardButton(
                 "🌙 Пройти вечерний чек-ин",
                 callback_data="day_evening"
             )
         ],
+
         [
             InlineKeyboardButton(
-                "⏳ Позже",
-                callback_data="evening_later"
+                "⏰ Напомнить через час",
+                callback_data="delay_evening_checkin"
             )
         ],
+
+        [
+            InlineKeyboardButton(
+                "🏠 В меню",
+                callback_data="go_menu"
+            )
+        ]
+
     ]
 
 
     await context.bot.send_message(
+
         chat_id=user_id,
+
         text=(
+
             f"🌙 Добрый вечер, {name}!\n\n"
-            "День завершён.\n\n"
-            "Самое время немного остановиться "
-            "и посмотреть назад: "
-            "что получилось, что было сложно "
-            "и какой вывод можно забрать с собой.\n\n"
-            "Займёт всего пару минут."
+
+            "День подходит к концу.\n\n"
+
+            "Самое время остановиться "
+            "и посмотреть, как он прошёл."
+
         ),
-        reply_markup=InlineKeyboardMarkup(keyboard)
+
+        reply_markup=InlineKeyboardMarkup(
+            keyboard
+        )
+
     )
 
 
 
 # =========================================================
-# СОХРАНЕНИЕ ФАКТА ОТПРАВКИ
+# СОХРАНЕНИЕ ОТПРАВКИ
 # =========================================================
 
 
@@ -252,6 +311,7 @@ def save_notification(
     user_id,
     notification_type
 ):
+
 
     conn = get_connection()
     cursor = conn.cursor()
@@ -263,27 +323,37 @@ def save_notification(
 
 
     field = (
+
         "morning_notification_sent"
+
         if notification_type == "morning"
+
         else
+
         "evening_notification_sent"
+
     )
 
 
     cursor.execute(
+
         f"""
         UPDATE users
 
         SET {field} = ?
 
         WHERE user_id = ?
+
         """,
+
         (
             today,
             user_id
         )
+
     )
 
 
     conn.commit()
+
     conn.close()

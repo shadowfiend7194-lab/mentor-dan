@@ -128,13 +128,43 @@ async def show_settings(
         ],
     ]
 
-    await update.effective_message.reply_text(
+    text = (
         "⚙️ <b>Настройки</b>\n\n"
-        "Выбери, что хочешь изменить:",
-        parse_mode="HTML",
-        reply_markup=InlineKeyboardMarkup(keyboard)
+        "Выбери, что хочешь изменить:"
     )
 
+    query = update.callback_query
+
+    if query:
+
+        try:
+            await query.answer()
+        except Exception:
+            pass
+
+        try:
+            await query.edit_message_text(
+                text,
+                parse_mode="HTML",
+                reply_markup=InlineKeyboardMarkup(
+                    keyboard
+                )
+            )
+        except Exception as error:
+
+            if "Message is not modified" not in str(error):
+
+                raise
+
+    else:
+
+        await update.effective_message.reply_text(
+            text,
+            parse_mode="HTML",
+            reply_markup=InlineKeyboardMarkup(
+                keyboard
+            )
+        )
 
 # =========================================================
 # ОБРАБОТКА ТЕКСТОВЫХ КНОПОК МЕНЮ

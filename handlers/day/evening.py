@@ -6,8 +6,9 @@ from telegram import (
 
 from telegram.ext import ContextTypes
 
-from database.checkins import save_checkin
+
 from database.users import update_checkin_date
+from database.checkin_history import save_checkin_status
 
 # =========================================================
 # СТАРТ ВЕЧЕРНЕГО ЧЕК-ИНА
@@ -275,10 +276,9 @@ async def handle_evening_text(
             update,
             context
         )
-
+      
 
         return True
-
 
     return False
 
@@ -344,6 +344,12 @@ async def finish_evening(
     update_checkin_date(
         update.effective_user.id,
         "evening"
+    )
+
+    save_checkin_status(
+        user_id=update.effective_user.id,
+        checkin_type="evening",
+        completed=1
     )
 
 

@@ -7,7 +7,11 @@ from telegram import (
 
 from telegram.ext import ContextTypes
 
-from database.users import update_sleep_settings, get_user
+from database.users import (
+    get_user,
+    update_sleep_settings,
+    update_notification_settings,
+)
 
 
 # =========================================================
@@ -24,11 +28,9 @@ async def show_sleep_settings(
     if query:
         await query.answer()
 
-
     user = get_user(
         update.effective_user.id
     )
-
 
     wake_time = (
         user.get("wake_time")
@@ -42,28 +44,30 @@ async def show_sleep_settings(
         else "не установлено"
     )
 
-
     keyboard = [
+
         [
             InlineKeyboardButton(
                 "🌅 Изменить время подъёма",
                 callback_data="change_wake_time"
             )
         ],
+
         [
             InlineKeyboardButton(
                 "🌙 Изменить время сна",
                 callback_data="change_sleep_time"
             )
         ],
+
         [
             InlineKeyboardButton(
                 "⬅️ Назад",
                 callback_data="back_to_settings"
             )
         ],
-    ]
 
+    ]
 
     text = (
         "🌙 <b>Режим дня</b>\n\n"
@@ -71,7 +75,6 @@ async def show_sleep_settings(
         f"😴 Сон: <b>{sleep_time}</b>\n\n"
         "Что хочешь изменить?"
     )
-
 
     if query:
 
@@ -90,7 +93,6 @@ async def show_sleep_settings(
         )
 
 
-
 # =========================================================
 # ИЗМЕНИТЬ ПОДЪЁМ
 # =========================================================
@@ -104,11 +106,9 @@ async def change_wake_time(
 
     await query.answer()
 
-
     context.user_data[
         "settings_state"
     ] = "wake_time"
-
 
     await query.edit_message_text(
         "🌅 <b>Новое время подъёма</b>\n\n"
@@ -116,7 +116,6 @@ async def change_wake_time(
         "<b>08:30</b>",
         parse_mode="HTML"
     )
-
 
 
 # =========================================================
@@ -132,11 +131,9 @@ async def change_sleep_time(
 
     await query.answer()
 
-
     context.user_data[
         "settings_state"
     ] = "sleep_time"
-
 
     await query.edit_message_text(
         "🌙 <b>Новое время сна</b>\n\n"
@@ -145,6 +142,167 @@ async def change_sleep_time(
         parse_mode="HTML"
     )
 
+
+# =========================================================
+# ЭКРАН УВЕДОМЛЕНИЙ
+# =========================================================
+
+async def show_notification_settings(
+    update,
+    context: ContextTypes.DEFAULT_TYPE
+):
+
+    query = update.callback_query
+
+    if query:
+        await query.answer()
+
+    user = get_user(
+        update.effective_user.id
+    )
+
+    morning_enabled = (
+        user.get("morning_notifications_enabled", True)
+        if user
+        else True
+    )
+
+    evening_enabled = (
+        user.get("evening_notifications_enabled", True)
+        if user
+        else True
+    )
+
+    morning_status = (
+        "🟢 ВКЛ"
+        if morning_enabled
+        else
+        "🔴 ВЫКЛ"
+    )
+
+    evening_status = (
+        "🟢 ВКЛ"
+        if evening_enabled
+        else
+        "🔴 ВЫКЛ"
+    )
+
+    keyboard = [
+
+        [
+            InlineKeyboardButton(
+                f"☀️ Утренние: {morning_status}",
+                callback_data="toggle_morning_notifications"
+            )
+        ],
+
+        [
+            InlineKeyboardButton(
+                f"🌙 Вечерние: {evening_status}",
+                callback_data="toggle_evening_notifications"
+            )
+        ],
+
+        [
+            InlineKeyboardButton(
+                "⬅️ Назад",
+                callback_data="back_to_settings"
+            )
+        ],
+
+    ]
+
+    text = (
+        "🔔 <b>Уведомления</b>\n\n"
+        "Здесь можно включить или выключить "
+        "автоматические напоминания о чек-инах.\n\n"
+        f"☀️ Утренние: <b>{morning_status}</b>\n"
+        f"🌙 Вечерние: <b>{evening_status}</b>"
+    )
+
+    await query.edit_message_text(
+        text,
+        parse_mode="HTML",
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+
+
+# =========================================================
+# ПЕРЕКЛЮЧЕНИЕ УТРА
+# =========================================================
+
+async def toggle_morning_notifications(
+    update,
+    context
+):
+
+    query = update.callback_query
+
+    await query.answer()
+
+    user_id = update.effective_user.id
+
+    user = get_user(
+        user_id
+    )
+
+    current = (
+        user.get(
+            "morning_notifications_enabled",
+            True
+        )
+        if user
+        else True
+    )
+
+    update_notification_settings(
+        user_id,
+        morning_enabled=not current
+    )
+
+    await show_notification_settings(
+        update,
+        context
+    )
+
+
+# =========================================================
+# ПЕРЕКЛЮЧЕНИЕ ВЕЧЕРА
+# =========================================================
+
+async def toggle_evening_notifications(
+    update,
+    context
+):
+
+    query = update.callback_query
+
+    await query.answer()
+
+    user_id = update.effective_user.id
+
+    user = get_user(
+        user_id
+    )
+
+    current = (
+        user.get(
+            "evening_notifications_enabled",
+            True
+        )
+        if user
+        else True
+    )
+
+    update_notification_settings(
+        user_id,
+        evening_enabled=not current
+    )
+
+    await show_notification_settings(
+        update,
+        context
+    )
 
 
 # =========================================================
