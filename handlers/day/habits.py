@@ -11,6 +11,9 @@ from database.habits import (
 
 from handlers.day.screen import show_day
 
+from database.achievements import (
+    check_and_award_achievements,
+)
 
 # =========================================================
 # НАЖАТИЕ НА ПРИВЫЧКУ
@@ -78,6 +81,13 @@ async def habit_callback(
         habit_id=habit_id,
         completed=not completed
     )
+
+    if not completed:
+
+        await check_and_award_achievements(
+            update,
+            context
+        )
 
     await show_day(
         update,

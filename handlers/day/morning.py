@@ -8,7 +8,11 @@ from telegram.ext import ContextTypes
 from database.checkins import save_checkin
 from database.users import update_checkin_date
 from database.checkin_history import save_checkin_status
+from database.events import add_event
 
+from database.achievements import (
+    check_and_award_achievements,
+)
 
 # =========================================================
 # УТРЕННИЙ ЧЕК-ИН
@@ -165,6 +169,10 @@ async def morning_answer(
             5
         )
 
+        # -------------------------------------------------
+        # СОХРАНЯЕМ ЧЕК-ИН
+        # -------------------------------------------------
+
         save_checkin(
             user_id=update.effective_user.id,
             morning_energy=energy,
@@ -172,7 +180,10 @@ async def morning_answer(
             morning_mood=mood,
             morning_stress=score,
         )
-    
+
+        # -------------------------------------------------
+        # СОХРАНЯЕМ ИСТОРИЮ ЧЕК-ИНОВ
+        # -------------------------------------------------
 
         save_checkin_status(
             user_id=update.effective_user.id,
@@ -180,11 +191,37 @@ async def morning_answer(
             completed=1
         )
 
+        # -------------------------------------------------
+        # ФИКСИРУЕМ ПОСЛЕДНИЙ ЧЕК-ИН
+        # -------------------------------------------------
+
         update_checkin_date(
             update.effective_user.id,
             "morning"
         )
         
+        await check_and_award_achievements(
+            update,
+            context
+        )
+
+        # -------------------------------------------------
+        # СОБЫТИЕ ИСТОРИИ ПУТИ
+        #
+        # INSERT OR IGNORE в add_event()
+        # не даст создать это событие повторно.
+        # -------------------------------------------------
+
+        add_event(
+            user_id=update.effective_user.id,
+            event_type="first_morning_checkin",
+            title="Первый утренний чек-ин",
+            description=(
+                "Впервые оценил своё состояние "
+                "и начал отслеживать себя."
+            )
+        )
+
         # -------------------------------------------------
         # КОРОТКИЙ АНАЛИЗ
         # -------------------------------------------------
@@ -213,7 +250,7 @@ async def morning_answer(
             )
 
         # -------------------------------------------------
-        # АНАЛИЗ
+        # ПОКАЗЫВАЕМ АНАЛИЗ
         # -------------------------------------------------
 
         await update.message.reply_text(
@@ -229,7 +266,7 @@ async def morning_answer(
         )
 
         # -------------------------------------------------
-        # АВТОМАТИЧЕСКИ ОТКРЫВАЕМ ГЛАВНОЕ МЕНЮ
+        # ОТКРЫВАЕМ ГЛАВНОЕ МЕНЮ
         # -------------------------------------------------
 
         from handlers.menu import show_menu

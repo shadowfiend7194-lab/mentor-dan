@@ -1,3 +1,4 @@
+from datetime import datetime
 from telegram import (
     Update,
     ReplyKeyboardMarkup,
@@ -6,9 +7,13 @@ from telegram import (
 
 from telegram.ext import ContextTypes
 
-
 from database.users import update_checkin_date
 from database.checkin_history import save_checkin_status
+from database.events import add_event
+
+from database.achievements import (
+    check_and_award_achievements,
+)
 
 # =========================================================
 # СТАРТ ВЕЧЕРНЕГО ЧЕК-ИНА
@@ -31,7 +36,6 @@ async def start_evening_checkin(
 
     context.user_data["checkin_type"] = "evening"
     context.user_data["evening_step"] = "score"
-
 
     await send_scale(
         update,
@@ -58,11 +62,9 @@ async def handle_evening_text(
     if not update.message:
         return False
 
-
     step = context.user_data.get(
         "evening_step"
     )
-
 
     # -----------------------------------------------------
     # ОЦЕНКА ДНЯ
@@ -78,13 +80,11 @@ async def handle_evening_text(
         ]:
             return False
 
-
         score = int(text)
 
         context.user_data[
             "evening_score"
         ] = score
-
 
         # Ветка 8-10
 
@@ -94,14 +94,12 @@ async def handle_evening_text(
                 "evening_step"
             ] = "high_reflection"
 
-
             await update.message.reply_text(
                 "🔥 Хороший день.\n\n"
                 "Что сегодня получилось лучше всего?\n\n"
                 "Напиши своими словами.",
                 reply_markup=ReplyKeyboardRemove()
             )
-
 
         # Ветка 5-7
 
@@ -111,13 +109,11 @@ async def handle_evening_text(
                 "evening_step"
             ] = "normal_positive"
 
-
             await update.message.reply_text(
                 "👍 Нормальный день.\n\n"
                 "Что сегодня получилось хорошо? 💭",
                 reply_markup=ReplyKeyboardRemove()
             )
-
 
         # Ветка 1-4
 
@@ -127,7 +123,6 @@ async def handle_evening_text(
                 "evening_step"
             ] = "low_reason"
 
-
             await update.message.reply_text(
                 "🫂 Сегодня день, похоже, "
                 "был непростым.\n\n"
@@ -136,9 +131,7 @@ async def handle_evening_text(
                 reply_markup=ReplyKeyboardRemove()
             )
 
-
         return True
-
 
     # -----------------------------------------------------
     # ХОРОШИЙ ДЕНЬ
@@ -150,15 +143,12 @@ async def handle_evening_text(
             "evening_positive"
         ] = update.message.text
 
-
         await finish_evening(
             update,
             context
         )
 
         return True
-
-
 
     # -----------------------------------------------------
     # СРЕДНИЙ ДЕНЬ — ПЕРВЫЙ ВОПРОС
@@ -170,11 +160,9 @@ async def handle_evening_text(
             "evening_positive"
         ] = update.message.text
 
-
         context.user_data[
             "evening_step"
         ] = "normal_improve"
-
 
         await update.message.reply_text(
             "🚀 А что завтра можно сделать "
@@ -182,10 +170,7 @@ async def handle_evening_text(
             "Достаточно одного небольшого шага."
         )
 
-
         return True
-
-
 
     # -----------------------------------------------------
     # СРЕДНИЙ ДЕНЬ — ВТОРОЙ ВОПРОС
@@ -197,15 +182,12 @@ async def handle_evening_text(
             "evening_improve"
         ] = update.message.text
 
-
         await finish_evening(
             update,
             context
         )
 
         return True
-
-
 
     # -----------------------------------------------------
     # ПЛОХОЙ ДЕНЬ — ПРИЧИНА
@@ -217,11 +199,9 @@ async def handle_evening_text(
             "evening_problem"
         ] = update.message.text
 
-
         context.user_data[
             "evening_step"
         ] = "low_good"
-
 
         await update.message.reply_text(
             "💭 Несмотря на всё это,\n"
@@ -229,10 +209,7 @@ async def handle_evening_text(
             "Даже что-то совсем небольшое."
         )
 
-
         return True
-
-
 
     # -----------------------------------------------------
     # ПЛОХОЙ ДЕНЬ — ЧТО ПОЛУЧИЛОСЬ
@@ -244,11 +221,9 @@ async def handle_evening_text(
             "evening_positive"
         ] = update.message.text
 
-
         context.user_data[
             "evening_step"
         ] = "low_tomorrow"
-
 
         await update.message.reply_text(
             "🌅 И последнее.\n\n"
@@ -256,10 +231,7 @@ async def handle_evening_text(
             "чтобы день прошёл немного лучше?"
         )
 
-
         return True
-
-
 
     # -----------------------------------------------------
     # ПЛОХОЙ ДЕНЬ — ШАГ НА ЗАВТРА
@@ -271,17 +243,14 @@ async def handle_evening_text(
             "evening_improve"
         ] = update.message.text
 
-
         await finish_evening(
             update,
             context
         )
-      
 
         return True
 
     return False
-
 
 
 # =========================================================
@@ -298,7 +267,6 @@ async def finish_evening(
         5
     )
 
-
     if score >= 8:
 
         result = (
@@ -310,7 +278,6 @@ async def finish_evening(
             "строится дисциплина. 👣"
         )
 
-
     elif score >= 5:
 
         result = (
@@ -320,7 +287,6 @@ async def finish_evening(
             "Именно так появляется стабильность. 💪\n\n"
             "Продолжаем завтра. 👊"
         )
-
 
     else:
 
@@ -333,18 +299,20 @@ async def finish_evening(
             "Ты справишься. 🔥"
         )
 
-
     await update.message.reply_text(
         result,
         reply_markup=ReplyKeyboardRemove()
     )
 
+    # -----------------------------------------------------
+    # СОХРАНЯЕМ ФАКТ ВЕЧЕРНЕГО ЧЕК-ИНА
+    # -----------------------------------------------------
 
-    # сохраняем факт вечернего чек-ина
     update_checkin_date(
         update.effective_user.id,
         "evening"
     )
+
 
     save_checkin_status(
         user_id=update.effective_user.id,
@@ -353,21 +321,46 @@ async def finish_evening(
     )
 
 
+    await check_and_award_achievements(
+         update,
+        context
+    )
+
+    # -----------------------------------------------------
+    # СОБЫТИЕ ИСТОРИИ ПУТИ
+    # -----------------------------------------------------
+
+    add_event(
+        user_id=update.effective_user.id,
+        event_type="first_evening_checkin",
+        title="Первый вечерний чек-ин",
+        description=(
+            "Впервые остановился и подвёл итог дня."
+        )
+    )
+
+    # -----------------------------------------------------
+    # ОЧИЩАЕМ СОСТОЯНИЕ
+    # -----------------------------------------------------
+
     clear_evening_state(
         context
     )
 
-
-    # Автоматически открываем меню
+    # -----------------------------------------------------
+    # ВОЗВРАЩАЕМ ГЛАВНОЕ МЕНЮ
+    # -----------------------------------------------------
 
     from handlers.menu import show_menu
+
     import asyncio
+
     await asyncio.sleep(1)
+
     await show_menu(
         update,
         context
     )
-
 
 
 # =========================================================
@@ -384,7 +377,6 @@ async def send_scale(
         ["6", "7", "8", "9", "10"],
     ]
 
-
     await update.effective_message.reply_text(
         text,
         parse_mode="HTML",
@@ -393,7 +385,6 @@ async def send_scale(
             resize_keyboard=True
         )
     )
-
 
 
 # =========================================================

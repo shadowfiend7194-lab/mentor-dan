@@ -21,9 +21,11 @@ from handlers.goal.habits import (
     open_good_habits,
     open_bad_habits,
     open_habit,
-    edit_habit_name,
     edit_habit_frequency,
     habit_frequency_callback,
+    save_custom_habit_frequency,
+    edit_habit_name,
+    save_habit_name,
 )
 
 
@@ -163,6 +165,20 @@ async def goal_callback_router(
         return
 
     # =====================================================
+    # конкретная привычка
+    # =====================================================
+
+    if data.startswith("habit_edit_"):
+
+        await open_habit(
+            update,
+            context
+        )
+
+        return
+
+
+    # =====================================================
     # PRO — ДОБАВИТЬ ПРИВЫЧКУ
     # =====================================================
 
@@ -190,18 +206,7 @@ async def goal_callback_router(
 
         return
 
-    # =====================================================
-    # КОНКРЕТНАЯ ПРИВЫЧКА
-    # =====================================================
-
-    if data.startswith("habit_edit_"):
-
-        await open_habit(
-            update,
-            context
-        )
-
-        return
+    
 
     # =====================================================
     # ИЗМЕНЕНИЕ НАЗВАНИЯ
@@ -229,9 +234,6 @@ async def goal_callback_router(
 
         return
 
-    # =====================================================
-    # ВЫБОР ПЕРИОДИЧНОСТИ
-    # =====================================================
 
     if data in {
         "edit_frequency_daily",
@@ -245,3 +247,4 @@ async def goal_callback_router(
         )
 
         return
+        

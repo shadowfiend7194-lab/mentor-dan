@@ -46,6 +46,22 @@ from handlers.day.notifications import delay_morning_checkin
 
 from handlers.day.notifications import delay_evening_checkin
 
+from utils.error_handler import (
+    error_handler,
+    get_friendly_error,
+)
+import logging
+
+
+logging.basicConfig(
+    filename="logs/errors.log",
+    level=logging.ERROR,
+    format=(
+        "%(asctime)s | "
+        "%(levelname)s | "
+        "%(message)s"
+    )
+)
 # =========================================================
 # ЗАПУСК БОТА
 # =========================================================
@@ -87,7 +103,10 @@ def main():
         .build()
     )
     
-    
+    app.add_error_handler(
+        error_handler
+    )
+
     # =====================================================
     # УВЕДОМЛЕНИЯ ДЭНА
     # =====================================================
@@ -187,21 +206,6 @@ def main():
         )
     )
 
-
-    app.add_handler(
-        CallbackQueryHandler(
-            change_wake_time,
-            pattern="^change_wake_time$"
-        )
-    )
-
-
-    app.add_handler(
-        CallbackQueryHandler(
-            change_sleep_time,
-            pattern="^change_sleep_time$"
-        )
-    )
     
 
     app.add_handler(
@@ -270,9 +274,25 @@ def main():
 
     print("🚀 Дэн v2 запущен")
 
-    app.run_polling(
-        drop_pending_updates=True
-    )
+    try:
+
+        app.run_polling(
+            drop_pending_updates=True
+        )
+
+    except Exception as error:
+
+        print()
+        print(
+            get_friendly_error(error)
+        )
+        print()
+
+        import logging
+
+        logging.exception(
+            "Ошибка при запуске Дэна"
+        )
 
 
 # =========================================================

@@ -119,7 +119,36 @@ def migrate():
             print(
                 f"✅ Added {field}"
             )
+    # =====================================================
+    # ИСТОРИЯ ПУТИ
+    # =====================================================
 
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS user_events (
+
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+            user_id INTEGER NOT NULL,
+
+            event_type TEXT NOT NULL,
+
+            title TEXT NOT NULL,
+
+            description TEXT,
+    
+            created_at TEXT NOT NULL,
+
+            UNIQUE(
+                user_id,
+                event_type
+            )
+
+        )
+        """
+    )
+
+    
     conn.commit()
     conn.close()
 

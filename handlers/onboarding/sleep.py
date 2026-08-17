@@ -8,19 +8,32 @@ from telegram import (
 
 from telegram.ext import ContextTypes
 
-from database.users import create_user
+from database.users import (
+    create_user,
+    get_user,
+    update_sleep_settings,
+)
 
-from database.users import create_user, get_user
+from database.events import add_event
 
-from handlers.day.notifications import setup_day_notifications
+from handlers.day.notifications import (
+    setup_day_notifications
+)
 
+
+# =========================================================
+# НАСТРОЙКА РЕЖИМА ДНЯ
+# =========================================================
 
 async def start_sleep_setup(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE
 ):
 
-    context.user_data["onboarding_step"] = "wake_time"
+    context.user_data[
+        "onboarding_step"
+    ] = "wake_time"
+
 
     await update.effective_message.reply_text(
         "🌅 Отлично. Теперь настроим твой режим дня.\n\n"
@@ -30,6 +43,10 @@ async def start_sleep_setup(
     )
 
 
+# =========================================================
+# ВРЕМЯ ПОДЪЁМА
+# =========================================================
+
 async def handle_wake_time(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE
@@ -38,9 +55,13 @@ async def handle_wake_time(
     if not update.message:
         return
 
+
     text = update.message.text.strip()
 
-    wake_time = parse_time(text)
+    wake_time = parse_time(
+        text
+    )
+
 
     if wake_time is None:
 
@@ -52,8 +73,16 @@ async def handle_wake_time(
 
         return
 
-    context.user_data["wake_time"] = wake_time
-    context.user_data["onboarding_step"] = "sleep_time"
+
+    context.user_data[
+        "wake_time"
+    ] = wake_time
+
+
+    context.user_data[
+        "onboarding_step"
+    ] = "sleep_time"
+
 
     await update.message.reply_text(
         f"✅ Записал: подъём в <b>{wake_time}</b>.\n\n"
@@ -64,6 +93,10 @@ async def handle_wake_time(
     )
 
 
+# =========================================================
+# ВРЕМЯ СНА — ФИНАЛ ОНБОРДИНГА
+# =========================================================
+
 async def handle_sleep_time(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE
@@ -72,9 +105,13 @@ async def handle_sleep_time(
     if not update.message:
         return
 
+
     text = update.message.text.strip()
 
-    sleep_time = parse_time(text)
+    sleep_time = parse_time(
+        text
+    )
+
 
     if sleep_time is None:
 
@@ -86,17 +123,10 @@ async def handle_sleep_time(
 
         return
 
-    context.user_data["sleep_time"] = sleep_time
 
-
-
-
-    setup_day_notifications(
-        context,
-        update.effective_user.id,
-        context.user_data["wake_time"],
-        sleep_time
-    )
+    context.user_data[
+        "sleep_time"
+    ] = sleep_time
 
 
     # =====================================================
@@ -108,14 +138,56 @@ async def handle_sleep_time(
         name=context.user_data.get("name"),
         age=context.user_data.get("age"),
     )
+    
+
+    update_sleep_settings(
+        user_id=update.effective_user.id,
+        wake_time=context.user_data["wake_time"],
+        sleep_time=sleep_time,
+    )
 
     saved_user = get_user(
         update.effective_user.id
     )
 
-    print("💾 USER SAVED:", saved_user)
 
-    context.user_data["onboarding_step"] = "finish"
+    print(
+        "💾 USER SAVED:",
+        saved_user
+    )
+
+
+    # =====================================================
+    # СОБЫТИЕ: НАЧАЛО ПУТИ
+    # =====================================================
+
+    add_event(
+        user_id=update.effective_user.id,
+        event_type="start",
+        title="Начал свой путь",
+        description=(
+            "Первый шаг к более дисциплинированной "
+            "версии себя."
+        )
+    )
+
+
+    # =====================================================
+    # СОЗДАЁМ УВЕДОМЛЕНИЯ
+    # =====================================================
+
+    setup_day_notifications(
+        context,
+        update.effective_user.id,
+        context.user_data["wake_time"],
+        sleep_time
+    )
+
+
+    context.user_data[
+        "onboarding_step"
+    ] = "finish"
+
 
     keyboard = [
         [
@@ -126,6 +198,7 @@ async def handle_sleep_time(
         ]
     ]
 
+
     await update.message.reply_text(
         "🌙 Отлично, записал.\n\n"
         f"🌅 Подъём: <b>{context.user_data['wake_time']}</b>\n"
@@ -135,13 +208,22 @@ async def handle_sleep_time(
         "чтобы начать работать вместе.\n\n"
         "<b>Ты готов. Поехали. 🚀</b>",
         parse_mode="HTML",
-        reply_markup=InlineKeyboardMarkup(keyboard)
+        reply_markup=InlineKeyboardMarkup(
+            keyboard
+        )
     )
 
 
-def parse_time(text: str):
+# =========================================================
+# ПРОВЕРКА ВРЕМЕНИ
+# =========================================================
+
+def parse_time(
+    text: str
+):
 
     try:
+
         value = datetime.strptime(
             text,
             "%H:%M"

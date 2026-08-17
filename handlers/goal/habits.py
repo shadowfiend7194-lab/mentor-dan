@@ -314,8 +314,9 @@ async def habit_frequency_callback(
 
     if data == "edit_frequency_daily":
 
-        await update_frequency(
+       await update_frequency(
             update,
+            context,
             habit_id,
             "daily",
             None
@@ -326,6 +327,7 @@ async def habit_frequency_callback(
 
         await update_frequency(
             update,
+            context,
             habit_id,
             "weekdays",
             None
@@ -443,9 +445,9 @@ async def save_custom_habit_frequency(
 # =========================================================
 # ОБНОВЛЕНИЕ
 # =========================================================
-
 async def update_frequency(
     update,
+    context,
     habit_id,
     frequency,
     schedule_days
@@ -453,7 +455,6 @@ async def update_frequency(
 
     conn = get_connection()
     cursor = conn.cursor()
-
 
     cursor.execute(
         """
@@ -472,11 +473,22 @@ async def update_frequency(
         )
     )
 
-
     conn.commit()
     conn.close()
 
 
+    await update.effective_message.reply_text(
+        "✅ Периодичность обновлена."
+    )
+
+
+    from handlers.goal.screen import show_goal
+
+    await show_goal(
+        update,
+        context,
+        force_new=True
+    )
 
 # =========================================================
 # ИЗМЕНЕНИЕ НАЗВАНИЯ ПРИВЫЧКИ

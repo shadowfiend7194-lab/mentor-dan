@@ -20,7 +20,8 @@ from database.goals import get_main_goal
 
 async def show_goal(
     update: Update,
-    context: ContextTypes.DEFAULT_TYPE
+    context: ContextTypes.DEFAULT_TYPE,
+    force_new=False
 ):
 
     user_id = update.effective_user.id
@@ -173,7 +174,7 @@ async def show_goal(
     # РЕДАКТИРОВАНИЕ СООБЩЕНИЯ
     # =====================================================
 
-    if update.callback_query:
+    if update.callback_query and not force_new:
 
         await update.callback_query.edit_message_text(
             text,

@@ -3,6 +3,11 @@ from telegram.ext import ContextTypes
 
 from handlers.progress.screen import show_progress
 
+from handlers.progress.history import show_history
+
+from handlers.progress.achievements import (
+    show_achievements,
+)
 
 # =========================================================
 # CALLBACK РОУТЕР ПРОГРЕССА
@@ -43,19 +48,9 @@ async def progress_callback_router(
 
     if data == "progress_achievements":
 
-        await query.answer()
-
-        await query.message.reply_text(
-            "🏆 <b>Достижения</b>\n\n"
-            "🔒 Знакомство с Дэном\n"
-            "Пройди первый этап вместе с наставником.\n\n"
-
-            "🔒 7 дней вместе с Дэном\n"
-            "Продолжай работать над собой неделю подряд.\n\n"
-
-            "🔒 Первая серия\n"
-            "Создай свою первую стабильную серию выполнения.\n",
-            parse_mode="HTML"
+        await show_achievements(
+            update,
+            context
         )
 
         return
@@ -67,20 +62,12 @@ async def progress_callback_router(
 
     if data == "progress_history":
 
-        await query.answer()
-
-        await query.message.reply_text(
-            "🛤️ <b>История пути</b>\n\n"
-            "Здесь будет твоя история развития:\n\n"
-            "• первый день с Дэном\n"
-            "• полученные достижения\n"
-            "• важные изменения\n"
-            "• личные победы",
-            parse_mode="HTML"
+        await show_history(
+            update,
+            context
         )
 
         return
-
 
     # =====================================================
     # НЕДЕЛЬНЫЙ АНАЛИЗ
@@ -102,9 +89,13 @@ async def progress_callback_router(
 
         return
     
+    # =====================================================
+    # НАЗАД В ПРОГРЕСС
+    # =====================================================
+
     if data == "back_to_progress":
 
-        from handlers.progress.screen import show_progress
+        await query.answer()
 
         await show_progress(
             update,

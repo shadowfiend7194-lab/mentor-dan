@@ -6,7 +6,7 @@ from telegram import (
 
 from telegram.ext import ContextTypes
 
-from database.habits import create_habit
+from database.habits import create_habit, parse_custom_days
 
 
 # =========================================================
@@ -26,7 +26,7 @@ async def handle_good_habit(
     if not text:
         return
 
-    # Пользователь не хочет добавлять полезную привычку
+
     if text.lower() in [
         "нет",
         "нету",
@@ -36,11 +36,11 @@ async def handle_good_habit(
     ]:
 
         context.user_data["good_habit"] = None
-        context.user_data["good_habit_frequency"] = None
 
         context.user_data[
             "onboarding_step"
         ] = "bad_habit"
+
 
         await ask_bad_habit(
             update,
@@ -49,12 +49,18 @@ async def handle_good_habit(
 
         return
 
-    # Сохраняем во временное состояние
-    context.user_data["good_habit"] = text
+
+
+    context.user_data[
+        "good_habit"
+    ] = text
+
 
     context.user_data[
         "onboarding_step"
     ] = "good_habit_frequency"
+
+
 
     await ask_frequency(
         update,
@@ -63,8 +69,9 @@ async def handle_good_habit(
     )
 
 
+
 # =========================================================
-# ПЕРИОДИЧНОСТЬ ПОЛЕЗНОЙ ПРИВЫЧКИ
+# ЧАСТОТА ПОЛЕЗНОЙ
 # =========================================================
 
 async def handle_good_habit_frequency_callback(
@@ -77,31 +84,22 @@ async def handle_good_habit_frequency_callback(
     if not query:
         return
 
+
     await query.answer()
 
-    # -----------------------------------------------------
-    # КАЖДЫЙ ДЕНЬ
-    # -----------------------------------------------------
+
 
     if query.data == "good_frequency_daily":
 
-        create_habit(
-            user_id=update.effective_user.id,
-            name=context.user_data["good_habit"],
-            habit_type="good",
-            frequency="daily",
-            schedule_days=None,
-        )
+        frequency = "daily"
+        schedule_days = None
+
 
     elif query.data == "good_frequency_weekdays":
 
-        create_habit(
-            user_id=update.effective_user.id,
-            name=context.user_data["good_habit"],
-            habit_type="good",
-            frequency="weekdays",
-            schedule_days=None,
-        )
+        frequency = "weekdays"
+        schedule_days = None
+
 
     elif query.data == "good_frequency_custom":
 
@@ -109,39 +107,35 @@ async def handle_good_habit_frequency_callback(
             "onboarding_step"
         ] = "good_habit_custom_frequency"
 
+
         await query.message.reply_text(
-            "✏️ Хорошо.\n\n"
-            "Напиши дни, когда хочешь выполнять привычку.\n\n"
+            "Напиши дни.\n\n"
             "Например: Пн, Ср, Пт"
         )
 
         return
 
+
     else:
         return
 
-    # -----------------------------------------------------
-    # Сохраняем периодичность
-    # -----------------------------------------------------
 
-    context.user_data[
-        "good_habit_frequency"
-    ] = frequency
-
-    # -----------------------------------------------------
-    # СОХРАНЯЕМ ПОЛЕЗНУЮ ПРИВЫЧКУ В БД
-    # -----------------------------------------------------
 
     create_habit(
         user_id=update.effective_user.id,
         name=context.user_data["good_habit"],
         habit_type="good",
         frequency=frequency,
+        schedule_days=schedule_days,
     )
+
+
 
     context.user_data[
         "onboarding_step"
     ] = "bad_habit"
+
+
 
     await ask_bad_habit(
         update,
@@ -149,8 +143,9 @@ async def handle_good_habit_frequency_callback(
     )
 
 
+
 # =========================================================
-# СВОИ ДНИ — ПОЛЕЗНАЯ ПРИВЫЧКА
+# СВОИ ДНИ ПОЛЕЗНОЙ
 # =========================================================
 
 async def handle_good_habit_custom_frequency(
@@ -161,38 +156,28 @@ async def handle_good_habit_custom_frequency(
     if not update.message:
         return
 
-    text = update.message.text.strip()
-
-    if not text:
-        return
-
-    from database.habits import parse_custom_days
 
     days = parse_custom_days(
-        text
+        update.message.text
     )
+
 
     if not days:
 
         await update.message.reply_text(
-            "Не смог распознать дни. 😕\n\n"
-            "Напиши, например:\n"
-            "Пн, Ср, Пт"
+            "Не понял дни 😕\n"
+            "Например: Пн, Ср, Пт"
         )
 
         return
+
+
 
     schedule_days = ",".join(
         map(str, days)
     )
 
-    context.user_data[
-        "good_habit_frequency"
-    ] = "custom"
 
-    context.user_data[
-        "good_habit_schedule_days"
-    ] = schedule_days
 
     create_habit(
         user_id=update.effective_user.id,
@@ -202,9 +187,13 @@ async def handle_good_habit_custom_frequency(
         schedule_days=schedule_days,
     )
 
+
+
     context.user_data[
         "onboarding_step"
     ] = "bad_habit"
+
+
 
     await ask_bad_habit(
         update,
@@ -212,8 +201,9 @@ async def handle_good_habit_custom_frequency(
     )
 
 
+
 # =========================================================
-# ВОПРОС О ПЛОХОЙ ПРИВЫЧКЕ
+# ПЛОХАЯ ПРИВЫЧКА
 # =========================================================
 
 async def ask_bad_habit(
@@ -236,15 +226,16 @@ async def ask_bad_habit(
         ],
     ]
 
+
     await update.effective_message.reply_text(
         "Теперь наоборот. 👀\n\n"
-        "Есть ли привычка, от которой ты хочешь "
-        "избавиться?\n\n"
+        "Есть ли привычка, от которой ты хочешь избавиться?\n\n"
         "Например:\n"
         "📱 Меньше сидеть в телефоне\n"
         "🍔 Меньше есть вредной еды\n"
         "🌙 Не ложиться слишком поздно\n"
         "⏳ Не откладывать дела",
+        
         reply_markup=InlineKeyboardMarkup(
             keyboard
         )
@@ -252,7 +243,7 @@ async def ask_bad_habit(
 
 
 # =========================================================
-# ЕСТЬ / НЕТ ПЛОХОЙ ПРИВЫЧКИ
+# ВЫБОР ПЛОХОЙ
 # =========================================================
 
 async def handle_bad_habit_callback(
@@ -262,27 +253,25 @@ async def handle_bad_habit_callback(
 
     query = update.callback_query
 
+
     if not query:
         return
 
+
     await query.answer()
 
-    # -----------------------------------------------------
-    # НЕТ ПЛОХОЙ ПРИВЫЧКИ
-    # -----------------------------------------------------
+
 
     if query.data == "bad_habit_no":
 
-        context.user_data["bad_habit"] = None
-        context.user_data[
-            "bad_habit_frequency"
-        ] = None
 
         context.user_data[
             "onboarding_step"
         ] = "oath"
 
+
         from handlers.onboarding.oath import show_oath
+
 
         await show_oath(
             update,
@@ -291,28 +280,24 @@ async def handle_bad_habit_callback(
 
         return
 
-    # -----------------------------------------------------
-    # ЕСТЬ ПЛОХАЯ ПРИВЫЧКА
-    # -----------------------------------------------------
+
 
     if query.data == "bad_habit_yes":
+
 
         context.user_data[
             "onboarding_step"
         ] = "bad_habit_name"
 
+
         await query.message.reply_text(
-            "Понял. 👍\n\n"
-            "Напиши, от какой привычки хочешь избавиться.\n\n"
-            "Например: постоянно проверять телефон "
-            "или откладывать дела до последнего."
+            "Напиши плохую привычку."
         )
 
-        return
 
 
 # =========================================================
-# НАЗВАНИЕ ПЛОХОЙ ПРИВЫЧКИ
+# НАЗВАНИЕ ПЛОХОЙ
 # =========================================================
 
 async def handle_bad_habit_name(
@@ -323,18 +308,19 @@ async def handle_bad_habit_name(
     if not update.message:
         return
 
-    text = update.message.text.strip()
 
-    if not text:
-        return
 
     context.user_data[
         "bad_habit"
-    ] = text
+    ] = update.message.text.strip()
+
+
 
     context.user_data[
         "onboarding_step"
     ] = "bad_habit_frequency"
+
+
 
     await ask_frequency(
         update,
@@ -343,8 +329,9 @@ async def handle_bad_habit_name(
     )
 
 
+
 # =========================================================
-# ПЕРИОДИЧНОСТЬ ПЛОХОЙ ПРИВЫЧКИ
+# ЧАСТОТА ПЛОХОЙ
 # =========================================================
 
 async def handle_bad_habit_frequency_callback(
@@ -354,76 +341,67 @@ async def handle_bad_habit_frequency_callback(
 
     query = update.callback_query
 
+
     if not query:
         return
 
+
     await query.answer()
 
-    # -----------------------------------------------------
-    # КАЖДЫЙ ДЕНЬ
-    # -----------------------------------------------------
+
 
     if query.data == "bad_frequency_daily":
 
-        create_habit(
-            user_id=update.effective_user.id,
-            name=context.user_data["bad_habit"],
-            habit_type="bad",
-            frequency="daily",
-            schedule_days=None,
-        )
+        frequency = "daily"
+        schedule_days = None
+
 
     elif query.data == "bad_frequency_weekdays":
 
-        create_habit(
-            user_id=update.effective_user.id,
-            name=context.user_data["bad_habit"],
-            habit_type="bad",
-            frequency="weekdays",
-            schedule_days=None,
-        )
+        frequency = "weekdays"
+        schedule_days = None
+
 
     elif query.data == "bad_frequency_custom":
+
 
         context.user_data[
             "onboarding_step"
         ] = "bad_habit_custom_frequency"
 
+
         await query.message.reply_text(
-            "✏️ Хорошо.\n\n"
-            "Напиши дни, когда это обычно происходит.\n\n"
+            "Напиши дни.\n"
             "Например: Пн, Ср, Пт"
         )
 
+
         return
+
 
     else:
         return
 
-    # -----------------------------------------------------
-    # Сохраняем периодичность
-    # -----------------------------------------------------
 
-    context.user_data[
-        "bad_habit_frequency"
-    ] = frequency
-
-    # -----------------------------------------------------
-    # СОХРАНЯЕМ ПЛОХУЮ ПРИВЫЧКУ В БД
-    # -----------------------------------------------------
 
     create_habit(
         user_id=update.effective_user.id,
         name=context.user_data["bad_habit"],
         habit_type="bad",
         frequency=frequency,
+        schedule_days=schedule_days,
     )
+
+
 
     context.user_data[
         "onboarding_step"
     ] = "oath"
 
+
+
     from handlers.onboarding.oath import show_oath
+
 
     await show_oath(
         update,
@@ -431,8 +409,9 @@ async def handle_bad_habit_frequency_callback(
     )
 
 
+
 # =========================================================
-# СВОИ ДНИ — ПЛОХАЯ ПРИВЫЧКА
+# СВОИ ДНИ ПЛОХОЙ
 # =========================================================
 
 async def handle_bad_habit_custom_frequency(
@@ -443,38 +422,29 @@ async def handle_bad_habit_custom_frequency(
     if not update.message:
         return
 
-    text = update.message.text.strip()
 
-    if not text:
-        return
-
-    from database.habits import parse_custom_days
 
     days = parse_custom_days(
-        text
+        update.message.text
     )
+
+
 
     if not days:
 
         await update.message.reply_text(
-            "Не смог распознать дни. 😕\n\n"
-            "Напиши, например:\n"
-            "Пн, Ср, Пт"
+            "Не понял дни 😕"
         )
 
         return
+
+
 
     schedule_days = ",".join(
         map(str, days)
     )
 
-    context.user_data[
-        "bad_habit_frequency"
-    ] = "custom"
 
-    context.user_data[
-        "bad_habit_schedule_days"
-    ] = schedule_days
 
     create_habit(
         user_id=update.effective_user.id,
@@ -484,11 +454,16 @@ async def handle_bad_habit_custom_frequency(
         schedule_days=schedule_days,
     )
 
+
+
     context.user_data[
         "onboarding_step"
     ] = "oath"
 
+
+
     from handlers.onboarding.oath import show_oath
+
 
     await show_oath(
         update,
@@ -496,8 +471,9 @@ async def handle_bad_habit_custom_frequency(
     )
 
 
+
 # =========================================================
-# ВЫБОР ПЕРИОДИЧНОСТИ
+# КНОПКИ ЧАСТОТЫ
 # =========================================================
 
 async def ask_frequency(
@@ -506,64 +482,46 @@ async def ask_frequency(
     habit_type: str
 ):
 
-    if habit_type == "good":
+    prefix = (
+        "good"
+        if habit_type == "good"
+        else
+        "bad"
+    )
 
-        keyboard = [
-            [
-                InlineKeyboardButton(
-                    "📅 Каждый день",
-                    callback_data="good_frequency_daily"
-                )
-            ],
-            [
-                InlineKeyboardButton(
-                    "🗓️ Пн–Пт",
-                    callback_data="good_frequency_weekdays"
-                )
-            ],
-            [
-                InlineKeyboardButton(
-                    "✏️ Выбрать дни",
-                    callback_data="good_frequency_custom"
-                )
-            ],
-        ]
 
-        text = (
-            "📅 Как часто хочешь выполнять эту привычку?\n\n"
-            "Выбери удобный ритм:"
-        )
 
-    else:
+    keyboard = [
 
-        keyboard = [
-            [
-                InlineKeyboardButton(
-                    "📅 Каждый день",
-                    callback_data="bad_frequency_daily"
-                )
-            ],
-            [
-                InlineKeyboardButton(
-                    "🗓️ Пн–Пт",
-                    callback_data="bad_frequency_weekdays"
-                )
-            ],
-            [
-                InlineKeyboardButton(
-                    "✏️ Выбрать дни",
-                    callback_data="bad_frequency_custom"
-                )
-            ],
-        ]
+        [
+            InlineKeyboardButton(
+                "📅 Каждый день",
+                callback_data=f"{prefix}_frequency_daily"
+            )
+        ],
 
-        text = (
-            "📅 Как часто это обычно происходит?\n\n"
-            "Выбери подходящий вариант:"
-        )
+        [
+            InlineKeyboardButton(
+                "🗓️ Пн–Пт",
+                callback_data=f"{prefix}_frequency_weekdays"
+            )
+        ],
+
+        [
+            InlineKeyboardButton(
+                "✏️ Свои дни",
+                callback_data=f"{prefix}_frequency_custom"
+            )
+        ],
+
+    ]
+
+
 
     await update.effective_message.reply_text(
-        text,
+
+        "📅 Выбери периодичность:",
+
         reply_markup=InlineKeyboardMarkup(
             keyboard
         )

@@ -74,6 +74,7 @@ async def onboarding_callback_router(
         return
 
     data = query.data
+    await query.answer()
 
     # =====================================================
     # СТАРТОВЫЕ КНОПКИ
@@ -206,6 +207,33 @@ async def onboarding_callback_router(
 
         return
 
+    # =====================================================
+    # ИЗМЕНЕНИЕ ПРИВЫЧЕК
+    # =====================================================
+
+    if data.startswith("habit_frequency_"):
+
+        await edit_habit_frequency(
+            update,
+            context
+        )
+
+        return
+
+
+
+    if data in {
+        "edit_frequency_daily",
+        "edit_frequency_weekdays",
+        "edit_frequency_custom",
+    }:
+
+        await habit_frequency_callback(
+            update,
+            context
+        )
+
+        return
 
 # =========================================================
 # ТЕКСТОВЫЕ СООБЩЕНИЯ
