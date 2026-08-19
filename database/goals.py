@@ -83,7 +83,11 @@ def get_main_goal(
             title,
             is_main,
             active,
-            created_at
+            status,
+            created_at,
+            achieved_at,
+            achievement_note,
+            last_review_date
         FROM goals
         WHERE user_id = ?
         AND is_main = 1
@@ -108,7 +112,11 @@ def get_main_goal(
         "title": row[1],
         "is_main": bool(row[2]),
         "active": bool(row[3]),
-        "created_at": row[4],
+        "status": row[4] or "active",
+        "created_at": row[5],
+        "achieved_at": row[6],
+        "achievement_note": row[7],
+        "last_review_date": row[8],
     }
 
 
@@ -130,7 +138,11 @@ def get_user_goals(
             title,
             is_main,
             active,
-            created_at
+            status,
+            created_at,
+            achieved_at,
+            achievement_note,
+            last_review_date
         FROM goals
         WHERE user_id = ?
         AND active = 1
@@ -155,7 +167,11 @@ def get_user_goals(
                 "title": row[1],
                 "is_main": bool(row[2]),
                 "active": bool(row[3]),
-                "created_at": row[4],
+                "status": row[4] or "active",
+                "created_at": row[5],
+                "achieved_at": row[6],
+                "achievement_note": row[7],
+                "last_review_date": row[8],
             }
         )
 
@@ -215,6 +231,80 @@ def deactivate_goal(
         AND user_id = ?
         """,
         (
+            goal_id,
+            user_id,
+        )
+    )
+
+    conn.commit()
+    conn.close()
+
+
+
+# =========================================================
+# ОТМЕТИТЬ ПРОВЕРКУ ЦЕЛИ
+# =========================================================
+
+def mark_goal_reviewed(
+    user_id,
+    goal_id,
+    review_date
+):
+
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    cursor.execute(
+        """
+        UPDATE goals
+        SET last_review_date = ?
+        WHERE id = ?
+        AND user_id = ?
+        AND active = 1
+        """,
+        (
+            review_date,
+            goal_id,
+            user_id,
+        )
+    )
+
+    conn.commit()
+    conn.close()
+
+
+# =========================================================
+# ДОСТИЧЬ ЦЕЛИ
+# =========================================================
+
+def achieve_goal(
+    user_id,
+    goal_id,
+    achievement_note
+):
+
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    achieved_at = datetime.now().strftime(
+        "%Y-%m-%d %H:%M:%S"
+    )
+
+    cursor.execute(
+        """
+        UPDATE goals
+        SET
+            status = 'achieved',
+            achieved_at = ?,
+            achievement_note = ?,
+            is_main = 0
+        WHERE id = ?
+        AND user_id = ?
+        AND active = 1
+        """,
+        (
+            achieved_at,
+            achievement_note,
             goal_id,
             user_id,
         )

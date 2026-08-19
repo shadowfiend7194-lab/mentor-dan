@@ -10,6 +10,7 @@ def migrate():
     conn = get_connection()
     cursor = conn.cursor()
 
+
     # =====================================================
     # HABITS
     # =====================================================
@@ -25,18 +26,43 @@ def migrate():
         for row in cursor.fetchall()
     ]
 
-    if "schedule_days" not in habit_columns:
+    habit_fields = {
 
-        cursor.execute(
-            """
-            ALTER TABLE habits
-            ADD COLUMN schedule_days TEXT
-            """
-        )
 
-        print(
-            "✅ Added schedule_days to habits"
-        )
+        "schedule_days":
+        "TEXT",
+
+        "formed":
+        "INTEGER DEFAULT 0",
+
+        "formed_at":
+        "TEXT",
+
+        "last_review_date":
+        "TEXT",
+
+        "controlled":
+        "INTEGER DEFAULT 0",
+
+        "controlled_at":
+        "TEXT",
+    }
+
+    for field, field_type in habit_fields.items():
+
+        if field not in habit_columns:
+
+            cursor.execute(
+                f"""
+                ALTER TABLE habits
+                ADD COLUMN {field} {field_type}
+                """
+            )
+
+            print(
+                f"✅ Added {field} to habits"
+            )
+
 
     # =====================================================
     # HABIT LOGS
@@ -62,6 +88,54 @@ def migrate():
         )
         """
     )
+
+
+    # =====================================================
+    # GOALS
+    # =====================================================
+
+    cursor.execute(
+        """
+        PRAGMA table_info(goals)
+        """
+    )
+
+    goal_columns = [
+        row[1]
+        for row in cursor.fetchall()
+    ]
+
+    goal_fields = {
+
+        "status":
+        "TEXT DEFAULT 'active'",
+
+        "achieved_at":
+        "TEXT",
+
+        "achievement_note":
+        "TEXT",
+
+        "last_review_date":
+        "TEXT",
+    }
+
+
+    for field, field_type in goal_fields.items():
+
+        if field not in goal_columns:
+
+            cursor.execute(
+                f"""
+                ALTER TABLE goals
+                ADD COLUMN {field} {field_type}
+                """
+            )
+
+            print(
+                f"✅ Added {field} to goals"
+            )
+
 
     # =====================================================
     # USERS
@@ -94,6 +168,7 @@ def migrate():
         "INTEGER DEFAULT 1",
     }
 
+
     cursor.execute(
         """
         PRAGMA table_info(users)
@@ -104,6 +179,7 @@ def migrate():
         row[1]
         for row in cursor.fetchall()
     ]
+
 
     for field, field_type in user_fields.items():
 
@@ -119,6 +195,8 @@ def migrate():
             print(
                 f"✅ Added {field}"
             )
+
+
     # =====================================================
     # ИСТОРИЯ ПУТИ
     # =====================================================
@@ -136,7 +214,7 @@ def migrate():
             title TEXT NOT NULL,
 
             description TEXT,
-    
+
             created_at TEXT NOT NULL,
 
             UNIQUE(
@@ -148,9 +226,14 @@ def migrate():
         """
     )
 
-    
+
+    # =====================================================
+    # СОХРАНЕНИЕ
+    # =====================================================
+
     conn.commit()
     conn.close()
+
 
     print(
         "✅ Migration complete"

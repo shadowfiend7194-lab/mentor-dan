@@ -50,6 +50,12 @@ from utils.error_handler import (
     error_handler,
     get_friendly_error,
 )
+
+from handlers.habit_review import (
+    habit_review_callback,
+)
+
+
 import logging
 
 
@@ -137,17 +143,36 @@ def main():
             pattern=r"^(day_habit_\d+|day_morning|day_evening|go_menu|day_no_action)$"
         )
     )  
+    
+
 
     app.add_handler(
-    CallbackQueryHandler(
-        goal_callback_router,
-        pattern=(
-            r"^(goal_back|goal_edit|goal_edit_current|goal_add_pro|"
-            r"goal_habits|habit_edit|habit_edit_good|habit_edit_bad|"
-            r"habit_add_pro|habit_edit_\d+|habit_name_\d+|"
-            r"habit_frequency_\d+|"
-            r"edit_frequency_daily|edit_frequency_weekdays|"
-            r"edit_frequency_custom)$"
+        CallbackQueryHandler(
+            goal_callback_router,
+            pattern=r"goal_review_achieved|goal_review_continue|goal_review_back"
+        )
+    )
+
+    
+    app.add_handler(
+        CallbackQueryHandler(
+            habit_review_callback,
+            pattern=r"^(habit_review_(formed|continue)_\d+|bad_habit_(controlled|continue)_\d+)$"
+        )
+    )
+
+
+    app.add_handler(
+        CallbackQueryHandler(
+            goal_callback_router,
+            pattern=(
+                r"^(goal_back|goal_edit|goal_edit_current|goal_add_pro|"
+                r"goal_habits|habit_edit|habit_edit_good|habit_edit_bad|"
+                r"habit_add_pro|habit_edit_\d+|habit_name_\d+|"
+                r"habit_frequency_\d+|"
+                r"edit_frequency_daily|edit_frequency_weekdays|"
+                r"edit_frequency_custom|"
+                r"goal_review_achieved|goal_review_continue)$"
             )
         )
     )

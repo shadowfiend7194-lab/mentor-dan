@@ -231,13 +231,17 @@ def get_user_habits(
     cursor.execute(
         """
         SELECT
-
             id,
             name,
             habit_type,
             frequency,
-            schedule_days
-
+            schedule_days,
+            created_at,
+            formed,
+            formed_at,
+            last_review_date,
+            controlled,
+            controlled_at
         FROM habits
 
         WHERE user_id = ?
@@ -271,6 +275,12 @@ def get_user_habits(
                 "habit_type": row[2],
                 "frequency": row[3],
                 "schedule_days": row[4],
+                "created_at": row[5],
+                "formed": bool(row[6]),
+                "formed_at": row[7],
+                "last_review_date": row[8],
+                "controlled": bool(row[9]),
+                "controlled_at": row[10],
             }
         )
 
@@ -571,3 +581,200 @@ def get_habit_week_target(
 
 
     return total
+
+
+# =========================================================
+# ПОЛУЧИТЬ ПРИВЫЧКУ
+# =========================================================
+
+def get_habit(
+    user_id,
+    habit_id
+):
+
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    cursor.execute(
+        """
+        SELECT
+            id,
+            name,
+            habit_type,
+            frequency,
+            schedule_days,
+            created_at,
+            formed,
+            formed_at,
+            last_review_date
+        FROM habits
+        WHERE id = ?
+        AND user_id = ?
+        AND active = 1
+        """,
+        (
+            habit_id,
+            user_id,
+        )
+    )
+
+    row = cursor.fetchone()
+
+    conn.close()
+
+    if not row:
+        return None
+
+    return {
+        "id": row[0],
+        "name": row[1],
+        "habit_type": row[2],
+        "frequency": row[3],
+        "schedule_days": row[4],
+        "created_at": row[5],
+        "formed": bool(row[6]),
+        "formed_at": row[7],
+        "last_review_date": row[8],
+    }
+
+
+# =========================================================
+# ОТМЕТИТЬ ПРОВЕРКУ ПРИВЫЧКИ
+# =========================================================
+
+def mark_habit_reviewed(
+    user_id,
+    habit_id,
+    review_date
+):
+
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    cursor.execute(
+        """
+        UPDATE habits
+        SET last_review_date = ?
+        WHERE id = ?
+        AND user_id = ?
+        AND active = 1
+        """,
+        (
+            review_date,
+            habit_id,
+            user_id,
+        )
+    )
+
+    conn.commit()
+    conn.close()
+
+
+# =========================================================
+# СФОРМИРОВАТЬ ПРИВЫЧКУ
+# =========================================================
+
+def mark_habit_formed(
+    user_id,
+    habit_id
+):
+
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    formed_at = datetime.now().strftime(
+        "%Y-%m-%d %H:%M:%S"
+    )
+
+    cursor.execute(
+        """
+        UPDATE habits
+        SET
+            formed = 1,
+            formed_at = ?
+        WHERE id = ?
+        AND user_id = ?
+        AND active = 1
+        """,
+        (
+            formed_at,
+            habit_id,
+            user_id,
+        )
+    )
+
+    conn.commit()
+    conn.close()
+
+# =========================================================
+# ДЕРЖАТЬ ПЛОХУЮ ПРИВЫЧКУ ПОД КОНТРОЛЕМ
+# =========================================================
+
+def mark_habit_controlled(
+    user_id,
+    habit_id
+):
+
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    controlled_at = datetime.now().strftime(
+        "%Y-%m-%d %H:%M:%S"
+    )
+
+    cursor.execute(
+        """
+        UPDATE habits
+
+        SET
+            controlled = 1,
+            controlled_at = ?
+
+        WHERE id = ?
+        AND user_id = ?
+        AND active = 1
+
+        """,
+        (
+            controlled_at,
+            habit_id,
+            user_id
+        )
+    )
+
+    conn.commit()
+    conn.close()
+
+    
+def mark_habit_removed(
+    user_id,
+    habit_id
+):
+
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    cursor.execute(
+        """
+        UPDATE habits
+
+        SET
+            removed = 1,
+            removed_at = ?
+
+        WHERE
+            id = ?
+            AND user_id = ?
+
+        """,
+        (
+            datetime.now().strftime(
+                "%Y-%m-%d %H:%M:%S"
+            ),
+            habit_id,
+            user_id
+        )
+    )
+
+    conn.commit()
+    conn.close()

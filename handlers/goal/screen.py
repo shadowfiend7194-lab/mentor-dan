@@ -48,7 +48,11 @@ async def show_goal(
 
     if not goal:
 
-        goal = "Цель пока не указана."
+        goal = (
+            "🏆 Активной цели сейчас нет.\n\n"
+            "Предыдущая цель завершена. "
+            "Когда появится новая — мы начнём следующий этап."
+        )
 
 
     # =====================================================
@@ -63,14 +67,19 @@ async def show_goal(
     good_habits = [
         habit
         for habit in habits
-        if habit["habit_type"] == "good"
+        if (
+            habit["habit_type"] == "good"
+            and not habit.get("formed")
+        )
     ]
-
 
     bad_habits = [
         habit
         for habit in habits
-        if habit["habit_type"] == "bad"
+        if (
+            habit["habit_type"] == "bad"
+            and not habit.get("controlled")
+        )
     ]
 
 

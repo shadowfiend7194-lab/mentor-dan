@@ -12,7 +12,7 @@ ACHIEVEMENTS = [
 
     {
         "key": "first_step",
-        "category": "🌱 Первые шаги",
+        "category": "🚀 Начало пути",
         "title": "Первый шаг",
         "emoji": "🌱",
         "condition": "Завершить первый чек-ин.",
@@ -21,7 +21,7 @@ ACHIEVEMENTS = [
 
     {
         "key": "full_day",
-        "category": "🌱 Первые шаги",
+        "category": "🚀 Начало пути",
         "title": "Ориентир найден",
         "emoji": "🧭",
         "condition": "Пройти утренний и вечерний чек-ин в один день.",
@@ -33,7 +33,7 @@ ACHIEVEMENTS = [
 
     {
         "key": "first_rhythm",
-        "category": "🌱 Первые шаги",
+        "category": "🚀 Начало пути",
         "title": "Первый ритм",
         "emoji": "🔥",
         "condition": "Пройти чек-ины в течение 3 разных дней.",
@@ -87,7 +87,7 @@ ACHIEVEMENTS = [
 
     {
         "key": "good_habit_7",
-        "category": "🌿 Полезные привычки",
+        "category": "✅ Полезные привычки",
         "title": "Держу слово",
         "emoji": "🌿",
         "condition": "Полезная привычка выполнена 7 дней подряд.",
@@ -96,7 +96,7 @@ ACHIEVEMENTS = [
 
     {
         "key": "good_habit_14",
-        "category": "🌿 Полезные привычки",
+        "category": "✅ Полезные привычки",
         "title": "Вошло в систему",
         "emoji": "🔥",
         "condition": "Полезная привычка выполнена 14 дней подряд.",
@@ -108,7 +108,7 @@ ACHIEVEMENTS = [
 
     {
         "key": "good_habit_30",
-        "category": "🌿 Полезные привычки",
+        "category": "✅ Полезные привычки",
         "title": "Это уже твоё",
         "emoji": "👑",
         "condition": "Полезная привычка выполнена 30 дней подряд.",
@@ -145,9 +145,46 @@ ACHIEVEMENTS = [
         "description": "Сила — это контроль над собой.",
     },
 
+        {
+        "key": "first_goal_achieved",
+        "category": "🏆 Твои результаты",
+        "title": "Сказано — сделано",
+        "emoji": "🎯",
+        "condition": "Впервые достичь поставленной цели.",
+        "description": (
+            "Ты не просто поставил цель — "
+            "ты довёл её до результата."
+        ),
+    },
+
+    {
+        "key": "first_good_habit_formed",
+        "category": "🏆 Твои результаты",
+        "title": "Пошло в привычку",
+        "emoji": "🌱",
+        "condition": "Впервые сформировать полезную привычку.",
+        "description": (
+            "То, что раньше требовало усилий, "
+            "стало частью твоего ритма."
+        ),
+    },
+
+    {
+        "key": "first_bad_habit_controlled",
+        "category": "🏆 Твои результаты",
+        "title": "Что было, то прошло",
+        "emoji": "🛡️",
+        "condition": "Впервые оставить плохую привычку в прошлом.",
+        "description": (
+            "Ты оставил старую привычку позади. "
+            "Теперь решения принимаешь ты, а не она."
+        ),
+    },
+
+
     {
         "key": "iron_character",
-        "category": "🏆 Редкие",
+        "category": "✨ Редкие",
         "title": "Железный характер",
         "emoji": "🦾",
         "condition": "100 дней реальной активности с Дэном.",
@@ -683,6 +720,71 @@ async def check_and_award_achievements(
     active_days = get_active_days(
         user_id
     )
+    
+    # =====================================================
+    # ДОСТИЖЕНИЯ ЦЕЛЕЙ И ПРИВЫЧЕК
+    # =====================================================
+
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    # Достигнута ли хотя бы одна цель
+    cursor.execute(
+        """
+        SELECT COUNT(*)
+        FROM goals
+        WHERE user_id = ?
+        AND status = 'achieved'
+        """,
+        (
+            user_id,
+        )
+    )
+
+    achieved_goals = cursor.fetchone()[0] > 0
+
+
+    # Сформирована ли хотя бы одна хорошая привычка
+    cursor.execute(
+        """
+        SELECT COUNT(*)
+        FROM habits
+        WHERE user_id = ?
+        AND active = 1
+        AND habit_type = 'good'
+        AND formed = 1
+        """,
+        (
+            user_id,
+        )
+    )
+
+    formed_good_habits = (
+        cursor.fetchone()[0] > 0
+    )
+
+
+    # Переведена ли хотя бы одна плохая привычка
+    # в состояние "под контролем"
+    cursor.execute(
+        """
+        SELECT COUNT(*)
+        FROM habits
+        WHERE user_id = ?
+        AND active = 1
+        AND habit_type = 'bad'
+        AND controlled = 1
+        """,
+        (
+            user_id,
+        )
+    )
+
+    controlled_bad_habits = (
+        cursor.fetchone()[0] > 0
+    )
+
+    conn.close()
 
     earned = get_earned_keys(
         user_id
@@ -731,6 +833,15 @@ async def check_and_award_achievements(
 
         "bad_habit_30":
             bad_streak >= 30,
+                
+        "first_goal_achieved":
+            achieved_goals,
+
+        "first_good_habit_formed":
+            formed_good_habits,
+
+        "first_bad_habit_controlled":
+            controlled_bad_habits,
 
         "iron_character":
             active_days >= 100,

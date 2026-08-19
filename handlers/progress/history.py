@@ -30,9 +30,6 @@ async def show_history(
 
     user = get_user(user_id)
 
-    # =====================================================
-    # ЕСЛИ ПОЛЬЗОВАТЕЛЬ НЕ НАЙДЕН
-    # =====================================================
 
     if not user:
 
@@ -59,6 +56,7 @@ async def show_history(
         )
 
         return
+
 
     # =====================================================
     # ДНИ С ДЭНОМ
@@ -88,8 +86,10 @@ async def show_history(
 
         days_with_dan = 1
 
+
+
     # =====================================================
-    # КОЛИЧЕСТВО ЧЕК-ИНОВ
+    # ЧЕК-ИНЫ
     # =====================================================
 
     conn = get_connection()
@@ -99,9 +99,8 @@ async def show_history(
         """
         SELECT COUNT(*)
         FROM checkin_history
-        WHERE
-            user_id = ?
-            AND completed = 1
+        WHERE user_id = ?
+        AND completed = 1
         """,
         (
             user_id,
@@ -118,17 +117,21 @@ async def show_history(
 
     conn.close()
 
+
+
     # =====================================================
-    # ИСТОРИЯ СОБЫТИЙ
+    # СОБЫТИЯ (3 ПОСЛЕДНИХ)
     # =====================================================
 
     events = get_user_events(
         user_id,
-        limit=7
+        limit=3
     )
 
+
+
     # =====================================================
-    # ТЕКСТ
+    # ОСНОВНОЙ ТЕКСТ
     # =====================================================
 
     text = (
@@ -149,8 +152,10 @@ async def show_history(
         "📖 <b>История пути:</b>\n\n"
     )
 
+
+
     # =====================================================
-    # ЕСЛИ СОБЫТИЯ ЕСТЬ
+    # ИСТОРИЯ
     # =====================================================
 
     if events:
@@ -162,17 +167,65 @@ async def show_history(
             description = event[2]
             created_at_event = event[3]
 
-            icon = {
-                "start": "🌱",
-                "first_morning_checkin": "☀️",
-                "first_evening_checkin": "🌙",
-                "rhythm": "🔥",
-                "comeback": "👊",
-                "achievement": "🏆",
-            }.get(
-                event_type,
-                "⭐"
-            )
+
+            # ЭМОДЗИ СОБЫТИЙ
+
+            if event_type == "start":
+
+                icon = "🌱"
+
+
+            elif event_type == "first_morning_checkin":
+
+                icon = "☀️"
+
+
+            elif event_type == "first_evening_checkin":
+
+                icon = "🌙"
+
+
+            elif event_type == "rhythm":
+
+                icon = "🔥"
+
+
+            elif event_type == "comeback":
+
+                icon = "👊"
+
+
+            elif event_type == "achievement":
+
+                icon = "🏆"
+
+
+            elif event_type.startswith(
+                "goal_achieved"
+            ):
+
+                icon = "🏆"
+
+
+            elif event_type.startswith(
+                "habit_formed"
+            ):
+
+                icon = "🌱"
+
+
+            elif event_type.startswith(
+                "bad_habit"
+            ):
+
+                icon = "🛡️"
+
+
+            else:
+
+                icon = "⭐"
+
+
 
             text += (
                 f"{icon} <b>{title}</b>\n"
@@ -180,9 +233,6 @@ async def show_history(
                 f"<i>{format_event_date(created_at_event)}</i>\n\n"
             )
 
-    # =====================================================
-    # ЕСЛИ СОБЫТИЙ НЕТ
-    # =====================================================
 
     else:
 
@@ -192,18 +242,19 @@ async def show_history(
             "твоего движения с Дэном 👣"
         )
 
-    # =====================================================
-    # КНОПКА НАЗАД
-    # =====================================================
+
 
     keyboard = [
+
         [
             InlineKeyboardButton(
                 "⬅️ Назад",
                 callback_data="back_to_progress"
             )
         ]
+
     ]
+
 
     await query.edit_message_text(
         text,
@@ -214,40 +265,47 @@ async def show_history(
     )
 
 
+
 # =========================================================
 # ДЕНЬ / ДНЯ / ДНЕЙ
 # =========================================================
 
-def get_day_word(
-    number
-):
+def get_day_word(number):
 
     number = number % 100
 
     if 11 <= number <= 14:
+
         return "дней"
+
 
     number = number % 10
 
+
     if number == 1:
+
         return "день"
 
+
     if 2 <= number <= 4:
+
         return "дня"
+
 
     return "дней"
 
 
+
 # =========================================================
-# ФОРМАТ ДАТЫ НАЧАЛА ПУТИ
+# ФОРМАТ ДАТ
 # =========================================================
 
-def format_date(
-    value
-):
+def format_date(value):
 
     if not value:
+
         return "Дата неизвестна"
+
 
     try:
 
@@ -259,22 +317,20 @@ def format_date(
         return date.strftime(
             "%d.%m.%Y"
         )
+
 
     except ValueError:
 
         return value
 
 
-# =========================================================
-# ФОРМАТ ДАТЫ СОБЫТИЯ
-# =========================================================
 
-def format_event_date(
-    value
-):
+def format_event_date(value):
 
     if not value:
+
         return ""
+
 
     try:
 
@@ -286,6 +342,7 @@ def format_event_date(
         return date.strftime(
             "%d.%m.%Y"
         )
+
 
     except ValueError:
 

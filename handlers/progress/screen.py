@@ -15,6 +15,12 @@ from database.progress import get_progress_summary
 
 def analyze_energy(value):
 
+    if value == 0:
+        return (
+            "Пока недостаточно данных. "
+            "Заполняй чек-ины, и Дэн начнёт видеть твой прогресс."
+        )
+
     if value >= 8:
         return (
             "Отличный уровень ресурса. "
@@ -37,16 +43,6 @@ def analyze_energy(value):
         "Ресурс низкий. "
         "Сейчас особенно важно не перегружать себя."
     )
-    
-    if value == 0:
-        return "Пока недостаточно данных. Заполняй чек-ины, и Дэн начнёт видеть твой прогресс."
-    
-    
-    if energy:
-         f"{analyze_energy(energy)}"
-
-    else:
-        "Пока нет данных по энергии."
         
 
 def analyze_sleep(value):
@@ -201,12 +197,33 @@ async def show_progress(
         "evening_score"
     ]
 
+    achieved_goals = stats[
+        "achieved_goals"
+    ]
+
+    formed_good_habits = stats[
+        "formed_good_habits"
+    ]
+
+    controlled_bad_habits = stats[
+        "controlled_bad_habits"
+    ]
+
     # =====================================================
     # ТЕКСТ
     # =====================================================
 
     text = (
         "📊 <b>Мой прогресс</b>\n\n"
+
+        "🏆 <b>Достигнуто целей:</b> "
+        f"{achieved_goals}\n"
+
+        "🌱 <b>Сформировано привычек:</b> "
+        f"{formed_good_habits}\n"
+
+        "🛡️ <b>Привычек оставлено в прошлом:</b> "
+        f"{controlled_bad_habits}\n\n"
 
         f"🔥 <b>Лучшая серия:</b> "
         f"{best_streak} дн.\n"

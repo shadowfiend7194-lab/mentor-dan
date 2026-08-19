@@ -63,9 +63,20 @@ async def error_handler(
     context
 ):
 
+    import traceback
+
     error = context.error
 
-    # Полный traceback сохраняем в лог.
+
+    print(
+        "\n🔥🔥🔥 ОШИБКА ДЭНА 🔥🔥🔥"
+    )
+
+    print(
+        traceback.format_exc()
+    )
+
+
     logger.exception(
         "Ошибка при обработке обновления",
         exc_info=error

@@ -23,7 +23,7 @@ def add_event(
 
     cursor.execute(
         """
-        INSERT OR IGNORE INTO user_events
+        INSERT INTO user_events
         (
             user_id,
             event_type,
@@ -53,7 +53,7 @@ def add_event(
 
 def get_user_events(
     user_id,
-    limit=7
+    limit=5
 ):
 
     conn = get_connection()
@@ -77,7 +77,7 @@ def get_user_events(
         """,
         (
             user_id,
-            limit
+            limit,
         )
     )
 

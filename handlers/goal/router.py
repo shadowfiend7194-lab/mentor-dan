@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from telegram import (
     Update,
     InlineKeyboardButton,
@@ -23,9 +25,7 @@ from handlers.goal.habits import (
     open_habit,
     edit_habit_frequency,
     habit_frequency_callback,
-    save_custom_habit_frequency,
     edit_habit_name,
-    save_habit_name,
 )
 
 
@@ -43,7 +43,124 @@ async def goal_callback_router(
     if not query:
         return
 
+    print(
+        "🔥 GOAL CALLBACK:",
+        query.data
+    )
+
     data = query.data
+
+
+    # =====================================================
+    # ПРОВЕРКА ЦЕЛИ — ДОСТИГ
+    # =====================================================
+
+    if data == "goal_review_achieved":
+
+        await query.answer()
+
+        context.user_data[
+            "goal_review_state"
+        ] = "waiting_result"
+
+
+        await query.message.reply_text(
+            "🏆 Отлично.\n\n"
+            "Теперь расскажи, что стало для тебя "
+            "доказательством, что ты действительно "
+            "достиг цели.\n\n"
+            "Например:\n"
+            "«Мой вес 79,6 кг»\n"
+            "«Сдал экзамен»\n"
+            "«Теперь свободно говорю на английском»",
+            reply_markup=InlineKeyboardMarkup(
+                [
+                    [
+                        InlineKeyboardButton(
+                            "↩️ Я ошибся",
+                            callback_data="goal_review_back"
+                        )
+                    ]
+                ]
+            )
+        )
+
+        return
+
+
+    # =====================================================
+    # ОТМЕНА ПОДТВЕРЖДЕНИЯ ДОСТИЖЕНИЯ
+    # =====================================================
+
+    if data == "goal_review_back":
+
+        await query.answer()
+
+        context.user_data.pop(
+            "goal_review_state",
+            None
+        )
+
+
+        await query.message.reply_text(
+            "👍 Хорошо. Цель остаётся в работе."
+        )
+
+
+        from handlers.menu import show_menu
+
+        await show_menu(
+            update,
+            context
+        )
+
+        return
+
+
+    # =====================================================
+    # ПРОВЕРКА ЦЕЛИ — ПРОДОЛЖАЮ
+    # =====================================================
+
+    if data == "goal_review_continue":
+
+        await query.answer()
+
+        from database.goals import (
+            get_main_goal,
+            mark_goal_reviewed,
+        )
+
+        goal = get_main_goal(
+            update.effective_user.id
+        )
+
+        if goal:
+
+            mark_goal_reviewed(
+                update.effective_user.id,
+                goal["id"],
+                datetime.now().strftime(
+                    "%Y-%m-%d"
+                )
+            )
+
+
+        await query.message.reply_text(
+            "💪 Хорошо.\n\n"
+            "Продолжаем путь. "
+            "Я спрошу тебя снова позже."
+        )
+
+
+        from handlers.menu import show_menu
+
+        await show_menu(
+            update,
+            context
+        )
+
+        return
+
 
     # =====================================================
     # НАЗАД К «МОЕЙ ЦЕЛИ»
@@ -58,6 +175,7 @@ async def goal_callback_router(
 
         return
 
+
     # =====================================================
     # ИЗМЕНИТЬ ЦЕЛЬ
     # =====================================================
@@ -71,6 +189,7 @@ async def goal_callback_router(
 
         return
 
+
     # =====================================================
     # ИЗМЕНИТЬ ТЕКУЩУЮ ЦЕЛЬ
     # =====================================================
@@ -83,6 +202,7 @@ async def goal_callback_router(
         )
 
         return
+
 
     # =====================================================
     # PRO — ДОБАВИТЬ ЦЕЛЬ
@@ -112,6 +232,7 @@ async def goal_callback_router(
 
         return
 
+
     # =====================================================
     # УПРАВЛЕНИЕ ПРИВЫЧКАМИ
     # =====================================================
@@ -124,6 +245,7 @@ async def goal_callback_router(
         )
 
         return
+
 
     # =====================================================
     # ИЗМЕНИТЬ ТЕКУЩУЮ ПРИВЫЧКУ
@@ -138,6 +260,7 @@ async def goal_callback_router(
 
         return
 
+
     # =====================================================
     # ПОЛЕЗНЫЕ ПРИВЫЧКИ
     # =====================================================
@@ -151,6 +274,7 @@ async def goal_callback_router(
 
         return
 
+
     # =====================================================
     # НЕЖЕЛАТЕЛЬНЫЕ ПРИВЫЧКИ
     # =====================================================
@@ -158,19 +282,6 @@ async def goal_callback_router(
     if data == "habit_edit_bad":
 
         await open_bad_habits(
-            update,
-            context
-        )
-
-        return
-
-    # =====================================================
-    # конкретная привычка
-    # =====================================================
-
-    if data.startswith("habit_edit_"):
-
-        await open_habit(
             update,
             context
         )
@@ -206,7 +317,6 @@ async def goal_callback_router(
 
         return
 
-    
 
     # =====================================================
     # ИЗМЕНЕНИЕ НАЗВАНИЯ
@@ -220,6 +330,7 @@ async def goal_callback_router(
         )
 
         return
+
 
     # =====================================================
     # ИЗМЕНЕНИЕ ПЕРИОДИЧНОСТИ
@@ -235,6 +346,10 @@ async def goal_callback_router(
         return
 
 
+    # =====================================================
+    # ВЫБОР ПЕРИОДИЧНОСТИ
+    # =====================================================
+
     if data in {
         "edit_frequency_daily",
         "edit_frequency_weekdays",
@@ -247,4 +362,3 @@ async def goal_callback_router(
         )
 
         return
-        

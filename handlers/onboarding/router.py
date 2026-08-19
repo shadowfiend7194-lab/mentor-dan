@@ -1,4 +1,5 @@
 from telegram import Update
+
 from telegram.ext import ContextTypes
 
 from handlers.onboarding.intro import (
@@ -48,7 +49,6 @@ from handlers.day.evening import (
     handle_evening_text,
 )
 
-
 from handlers.goal.edit_goal import (
     save_edited_goal,
 )
@@ -60,7 +60,7 @@ from handlers.goal.habits import (
 
 
 # =========================================================
-# CALLBACK-КНОПКИ
+# CALLBACK-КНОПКИ ОНБОРДИНГА
 # =========================================================
 
 async def onboarding_callback_router(
@@ -74,7 +74,12 @@ async def onboarding_callback_router(
         return
 
     data = query.data
-    await query.answer()
+
+    try:
+        await query.answer()
+    except Exception:
+        pass
+
 
     # =====================================================
     # СТАРТОВЫЕ КНОПКИ
@@ -89,6 +94,7 @@ async def onboarding_callback_router(
 
         return
 
+
     if data == "why_intro":
 
         await why_intro(
@@ -98,6 +104,7 @@ async def onboarding_callback_router(
 
         return
 
+
     if data == "back_to_start":
 
         await back_to_start(
@@ -106,6 +113,7 @@ async def onboarding_callback_router(
         )
 
         return
+
 
     # =====================================================
     # ВОЗРАСТ
@@ -125,6 +133,7 @@ async def onboarding_callback_router(
 
         return
 
+
     # =====================================================
     # ХОРОШАЯ ПРИВЫЧКА — ПЕРИОДИЧНОСТЬ
     # =====================================================
@@ -142,6 +151,7 @@ async def onboarding_callback_router(
 
         return
 
+
     # =====================================================
     # ПЛОХАЯ ПРИВЫЧКА — ЕСТЬ / НЕТ
     # =====================================================
@@ -157,6 +167,7 @@ async def onboarding_callback_router(
         )
 
         return
+
 
     # =====================================================
     # ПЛОХАЯ ПРИВЫЧКА — ПЕРИОДИЧНОСТЬ
@@ -175,6 +186,7 @@ async def onboarding_callback_router(
 
         return
 
+
     # =====================================================
     # КЛЯТВА
     # =====================================================
@@ -188,13 +200,12 @@ async def onboarding_callback_router(
 
         return
 
+
     # =====================================================
     # ГЛАВНОЕ МЕНЮ ПОСЛЕ ОНБОРДИНГА
     # =====================================================
 
     if data == "open_main_menu":
-
-        await query.answer()
 
         context.user_data[
             "onboarding_step"
@@ -207,33 +218,6 @@ async def onboarding_callback_router(
 
         return
 
-    # =====================================================
-    # ИЗМЕНЕНИЕ ПРИВЫЧЕК
-    # =====================================================
-
-    if data.startswith("habit_frequency_"):
-
-        await edit_habit_frequency(
-            update,
-            context
-        )
-
-        return
-
-
-
-    if data in {
-        "edit_frequency_daily",
-        "edit_frequency_weekdays",
-        "edit_frequency_custom",
-    }:
-
-        await habit_frequency_callback(
-            update,
-            context
-        )
-
-        return
 
 # =========================================================
 # ТЕКСТОВЫЕ СООБЩЕНИЯ
@@ -246,7 +230,113 @@ async def text_router(
 
     if not update.message:
         return
-    
+
+
+    # =====================================================
+    # РЕЗУЛЬТАТ ДОСТИЖЕНИЯ ЦЕЛИ
+    # =====================================================
+
+    if context.user_data.get(
+        "goal_review_state"
+    ) == "waiting_result":
+
+        from database.goals import (
+            get_main_goal,
+            achieve_goal,
+        )   
+
+        from database.events import (
+            add_event,
+        )
+
+        note = update.message.text.strip()
+
+        if not note:
+            return
+
+
+        goal = get_main_goal(
+            update.effective_user.id
+        )
+
+
+        if not goal:
+
+            context.user_data.pop(
+                "goal_review_state",
+                None
+            )
+
+            await update.message.reply_text(
+                "Не нашёл активную цель."
+            )
+
+            return
+
+
+        achieve_goal(
+            user_id=update.effective_user.id,
+            goal_id=goal["id"],
+            achievement_note=note,
+        )
+
+
+        # -------------------------------------------------
+        # СОБЫТИЕ В ИСТОРИИ ПУТИ
+        # -------------------------------------------------
+
+        add_event(
+            user_id=update.effective_user.id,
+            event_type="goal_achieved",
+            title="Достиг цели",
+            description=(
+                f"Цель: {goal['title']}. "
+                f"Результат: {note}"
+            )
+        )
+
+
+        context.user_data.pop(
+            "goal_review_state",
+            None
+        )
+
+
+        # -------------------------------------------------
+        # ФИНАЛЬНОЕ СООБЩЕНИЕ ДЭНА
+        # -------------------------------------------------
+
+        await update.message.reply_text(
+            "🏆 <b>Ты сделал это.</b>\n\n"
+            f"Ты достиг цели:\n"
+            f"«{goal['title']}»\n\n"
+            f"<b>Твоё подтверждение:</b>\n"
+            f"{note}\n\n"
+            "Это не просто галочка в боте.\n"
+            "Ты поставил перед собой цель и довёл её "
+            "до результата.\n\n"
+            "В какой-то момент это было просто намерением. "
+            "Теперь это уже факт.\n\n"
+            "Запомни это ощущение. "
+            "Когда следующая цель покажется слишком далёкой, "
+            "вспомни, что ты уже однажды дошёл до конца.\n\n"
+            "<b>Именно так постепенно меняется человек. 👊</b>",
+            parse_mode="HTML"
+        )
+
+
+        # -------------------------------------------------
+        # ВОЗВРАЩАЕМ В ГЛАВНОЕ МЕНЮ
+        # -------------------------------------------------
+
+        await show_menu(
+            update,
+            context
+        )
+
+        return
+
+
     # =====================================================
     # НАСТРОЙКИ — ИЗМЕНЕНИЕ ВРЕМЕНИ
     # =====================================================
@@ -316,6 +406,8 @@ async def text_router(
         )
 
         return
+
+
     # =====================================================
     # УТРЕННИЙ ЧЕК-ИН
     # =====================================================

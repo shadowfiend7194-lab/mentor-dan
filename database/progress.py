@@ -279,7 +279,108 @@ def get_evening_average(
         1
     )
 
+# =========================================================
+# ДОСТИГНУТО ЦЕЛЕЙ
+# =========================================================
 
+def get_achieved_goals_count(
+    user_id
+):
+
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    cursor.execute(
+        """
+        SELECT COUNT(*)
+        FROM goals
+        WHERE user_id = ?
+        AND status = 'achieved'
+        """,
+        (
+            user_id,
+        )
+    )
+
+    result = cursor.fetchone()
+
+    conn.close()
+
+    return (
+        result[0]
+        if result
+        else 0
+    )
+
+
+# =========================================================
+# СФОРМИРОВАНО ХОРОШИХ ПРИВЫЧЕК
+# =========================================================
+
+def get_formed_good_habits_count(
+    user_id
+):
+
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    cursor.execute(
+        """
+        SELECT COUNT(*)
+        FROM habits
+        WHERE user_id = ?
+        AND habit_type = 'good'
+        AND formed = 1
+        """,
+        (
+            user_id,
+        )
+    )
+
+    result = cursor.fetchone()
+
+    conn.close()
+
+    return (
+        result[0]
+        if result
+        else 0
+    )
+
+
+# =========================================================
+# ПЛОХИХ ПРИВЫЧЕК ОСТАВЛЕНО В ПРОШЛОМ
+# =========================================================
+
+def get_controlled_bad_habits_count(
+    user_id
+):
+
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    cursor.execute(
+        """
+        SELECT COUNT(*)
+        FROM habits
+        WHERE user_id = ?
+        AND habit_type = 'bad'
+        AND controlled = 1
+        """,
+        (
+            user_id,
+        )
+    )
+
+    result = cursor.fetchone()
+
+    conn.close()
+
+    return (
+        result[0]
+        if result
+        else 0
+    )
 
 # =========================================================
 # ОБЩАЯ СТАТИСТИКА
@@ -288,7 +389,17 @@ def get_evening_average(
 def get_progress_summary(
     user_id
 ):
+    achieved_goals = get_achieved_goals_count(
+        user_id
+    )
 
+    formed_good_habits = get_formed_good_habits_count(
+        user_id
+    )
+
+    controlled_bad_habits = get_controlled_bad_habits_count(
+        user_id
+    )
 
     streak = get_best_streak(
         user_id
@@ -345,5 +456,17 @@ def get_progress_summary(
 
         "evening_score":
             evening,
+
+
+        "achieved_goals":
+            achieved_goals,
+
+
+        "formed_good_habits":
+            formed_good_habits,
+
+
+        "controlled_bad_habits":
+            controlled_bad_habits,
 
     }
