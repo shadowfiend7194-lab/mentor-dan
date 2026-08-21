@@ -61,6 +61,12 @@ def init_db():
         """
     )
 
+    add_column_if_missing(
+        cursor,
+        "users",
+        "weekly_report_sent",
+        "TEXT"
+    )
 
     # =====================================================
     # HABITS
@@ -209,6 +215,24 @@ def init_db():
 
         )
         """
+    )
+
+   
+
+    cursor.execute(
+    """
+    CREATE TABLE IF NOT EXISTS weekly_reports (
+
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+        user_id INTEGER NOT NULL,
+
+        report_date TEXT NOT NULL,
+
+        text TEXT NOT NULL
+
+    )
+    """
     )
 
     conn.commit()

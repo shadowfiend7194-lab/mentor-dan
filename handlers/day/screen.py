@@ -109,7 +109,7 @@ async def show_day(
                 )
 
                 text = (
-                    f"✅ {habit['name']} 🔥 {streak}"
+                    f"🔥 {streak} | {habit['name']} ✅"
                 )
 
             else:
@@ -165,7 +165,7 @@ async def show_day(
                 )
 
                 text = (
-                    f"✅ {habit['name']} 🔥 {streak}"
+                    f"🔥 {streak} | {habit['name']} ✅"
                 )
 
             else:

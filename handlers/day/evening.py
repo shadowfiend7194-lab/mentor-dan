@@ -9,6 +9,7 @@ from telegram.ext import ContextTypes
 
 from database.users import update_checkin_date
 from database.checkin_history import save_checkin_status
+from database.checkins import save_checkin
 from database.events import add_event
 
 from database.achievements import (
@@ -318,6 +319,14 @@ async def finish_evening(
         user_id=update.effective_user.id,
         checkin_type="evening",
         completed=1
+    )
+
+    save_checkin(
+        user_id=update.effective_user.id,
+        evening_score=context.user_data.get("evening_score"),
+        evening_problem=context.user_data.get("evening_problem"),
+        evening_positive=context.user_data.get("evening_positive"),
+        evening_improve=context.user_data.get("evening_improve"),
     )
 
 

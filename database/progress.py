@@ -470,3 +470,73 @@ def get_progress_summary(
             controlled_bad_habits,
 
     }
+
+# =========================================================
+# СТАБИЛЬНОСТЬ НЕДЕЛИ
+# =========================================================
+
+def get_week_stability(
+    user_id
+):
+
+    week = get_week_habit_progress(
+        user_id
+    )
+
+
+    if week["total"] == 0:
+        return 0
+
+
+    return round(
+        week["completed"]
+        /
+        week["total"]
+        *
+        100
+    )
+
+
+# =========================================================
+# ПЕРВЫЙ ДЕНЬ НЕДЕЛЬНОГО ОТЧЁТА
+# =========================================================
+
+def get_week_report_period(
+    user_id
+):
+
+    conn = get_connection()
+    cursor = conn.cursor()
+
+
+    cursor.execute(
+        """
+        SELECT MIN(date)
+
+        FROM checkins
+
+        WHERE user_id = ?
+
+        AND date >= date('now','-6 day')
+
+        """,
+        (
+            user_id,
+        )
+    )
+
+
+    row = cursor.fetchone()
+
+
+    conn.close()
+
+
+    if not row or not row[0]:
+        return None, None
+
+
+    return (
+        row[0],
+        date.today().isoformat()
+    )

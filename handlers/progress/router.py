@@ -1,13 +1,12 @@
-from telegram import Update
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 
 from handlers.progress.screen import show_progress
-
 from handlers.progress.history import show_history
+from handlers.progress.achievements import show_achievements
 
-from handlers.progress.achievements import (
-    show_achievements,
-)
+from database.weekly_reports import get_last_reports
+
 
 # =========================================================
 # CALLBACK РОУТЕР ПРОГРЕССА
@@ -48,6 +47,8 @@ async def progress_callback_router(
 
     if data == "progress_achievements":
 
+        await query.answer()
+
         await show_achievements(
             update,
             context
@@ -62,12 +63,15 @@ async def progress_callback_router(
 
     if data == "progress_history":
 
+        await query.answer()
+
         await show_history(
             update,
             context
         )
 
         return
+
 
     # =====================================================
     # НЕДЕЛЬНЫЙ АНАЛИЗ
@@ -77,18 +81,71 @@ async def progress_callback_router(
 
         await query.answer()
 
-        await query.message.reply_text(
-            "🧠 <b>Недельный анализ</b>\n\n"
-            "Здесь появится глубокий анализ недели:\n\n"
-            "📊 Результаты недели\n"
-            "🕸 Радар состояния\n"
-            "🤖 Анализ Дэна\n"
-            "🎯 Фокус недели",
-            parse_mode="HTML"
+        user_id = update.effective_user.id
+
+        reports = get_last_reports(
+            user_id,
+            limit=1
+        )
+
+
+        # -------------------------------------------------
+        # КНОПКА НАЗАД
+        # -------------------------------------------------
+
+        keyboard = [
+            [
+                InlineKeyboardButton(
+                    "⬅️ Назад",
+                    callback_data="back_to_progress"
+                )
+            ]
+        ]
+
+
+        # -------------------------------------------------
+        # ЕСЛИ ОТЧЁТА ЕЩЁ НЕТ
+        # -------------------------------------------------
+
+        if not reports:
+
+            text = (
+                "🧠 <b>Недельный анализ</b>\n\n"
+
+                "Пока здесь ещё нет готового отчёта.\n\n"
+
+                "Дэн подготовит первый недельный анализ "
+                "после завершения твоей первой недели "
+                "наблюдений."
+            )
+
+
+        # -------------------------------------------------
+        # ПОКАЗЫВАЕМ ПОСЛЕДНИЙ ОТЧЁТ
+        # -------------------------------------------------
+
+        else:
+
+            report_date, report_text = reports[0]
+
+            text = report_text
+
+
+        # -------------------------------------------------
+        # РЕДАКТИРУЕМ ТЕКУЩЕЕ СООБЩЕНИЕ
+        # -------------------------------------------------
+
+        await query.message.edit_text(
+            text,
+            parse_mode="HTML",
+            reply_markup=InlineKeyboardMarkup(
+                keyboard
+            )
         )
 
         return
-    
+
+
     # =====================================================
     # НАЗАД В ПРОГРЕСС
     # =====================================================

@@ -45,7 +45,7 @@ async def habit_callback(
         return
 
     user_id = update.effective_user.id
-
+    
     habits = get_user_habits(
         user_id
     )
@@ -81,6 +81,7 @@ async def habit_callback(
         habit_id=habit_id,
         completed=not completed
     )
+   
 
     if not completed:
 
@@ -88,6 +89,8 @@ async def habit_callback(
             update,
             context
         )
+
+    
 
     await show_day(
         update,

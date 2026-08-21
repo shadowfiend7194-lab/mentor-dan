@@ -1,4 +1,5 @@
 import logging
+import os
 
 from telegram.error import (
     BadRequest,
@@ -7,12 +8,43 @@ from telegram.error import (
 )
 
 
-logger = logging.getLogger(__name__)
+# =========================================================
+# ЛОГИРОВАНИЕ ОШИБОК
+# =========================================================
+
+os.makedirs("logs", exist_ok=True)
+
+logger = logging.getLogger("dan_errors")
+logger.setLevel(logging.ERROR)
+logger.propagate = False
+
+if not logger.handlers:
+
+    file_handler = logging.FileHandler(
+        "logs/errors.log",
+        encoding="utf-8"
+    )
+
+    file_handler.setLevel(logging.ERROR)
+
+    formatter = logging.Formatter(
+        "%(asctime)s | %(levelname)s | %(message)s"
+    )
+
+    file_handler.setFormatter(
+        formatter
+    )
+
+    logger.addHandler(
+        file_handler
+    )
 
 
-def get_friendly_error(
-    error
-):
+# =========================================================
+# ПОНЯТНАЯ ОШИБКА ДЛЯ ПОЛЬЗОВАТЕЛЯ
+# =========================================================
+
+def get_friendly_error(error):
 
     if isinstance(error, TimedOut):
 
@@ -58,32 +90,31 @@ def get_friendly_error(
     )
 
 
+# =========================================================
+# ГЛОБАЛЬНЫЙ ОБРАБОТЧИК
+# =========================================================
+
 async def error_handler(
     update,
     context
 ):
 
-    import traceback
-
     error = context.error
 
-
-    print(
-        "\n🔥🔥🔥 ОШИБКА ДЭНА 🔥🔥🔥"
+    # ПОЛНЫЙ traceback именно в файл
+    logger.error(
+        "ОШИБКА ДЭНА",
+        exc_info=(
+            type(error),
+            error,
+            error.__traceback__
+        )
     )
 
-    print(
-        traceback.format_exc()
-    )
+    # =====================================================
+    # СООБЩЕНИЕ ПОЛЬЗОВАТЕЛЮ
+    # =====================================================
 
-
-    logger.exception(
-        "Ошибка при обработке обновления",
-        exc_info=error
-    )
-
-    # Если есть пользователь, пытаемся
-    # отправить ему понятное сообщение.
     if update and update.effective_chat:
 
         try:
@@ -94,8 +125,13 @@ async def error_handler(
                 parse_mode="HTML"
             )
 
-        except Exception:
+        except Exception as send_error:
 
-            logger.exception(
-                "Не удалось отправить сообщение об ошибке"
+            logger.error(
+                "Не удалось отправить сообщение об ошибке",
+                exc_info=(
+                    type(send_error),
+                    send_error,
+                    send_error.__traceback__
+                )
             )

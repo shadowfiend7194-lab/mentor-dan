@@ -1,3 +1,6 @@
+import logging
+import os
+
 from telegram.ext import (
     Application,
     CommandHandler,
@@ -43,7 +46,6 @@ from handlers.menu import (
 from scheduler.notifications import check_notifications
 
 from handlers.day.notifications import delay_morning_checkin
-
 from handlers.day.notifications import delay_evening_checkin
 
 from utils.error_handler import (
@@ -55,19 +57,20 @@ from handlers.habit_review import (
     habit_review_callback,
 )
 
+from handlers.progress.test_report import test_weekly_report
 
-import logging
+
+# =========================================================
+# ЛОГИРОВАНИЕ
+# =========================================================
 
 
-logging.basicConfig(
-    filename="logs/errors.log",
-    level=logging.ERROR,
-    format=(
-        "%(asctime)s | "
-        "%(levelname)s | "
-        "%(message)s"
-    )
-)
+
+logger = logging.getLogger(__name__)
+
+
+
+
 # =========================================================
 # ЗАПУСК БОТА
 # =========================================================
@@ -86,7 +89,7 @@ def main():
     # -----------------------------------------------------
 
     app = (
-    Application.builder()
+        Application.builder()
         .token(BOT_TOKEN)
 
         .connection_pool_size(50)
@@ -108,7 +111,11 @@ def main():
 
         .build()
     )
-    
+
+    # -----------------------------------------------------
+    # ОБРАБОТКА ОШИБОК
+    # -----------------------------------------------------
+
     app.add_error_handler(
         error_handler
     )
@@ -122,7 +129,7 @@ def main():
         interval=60,
         first=10
     )
-    
+
     # =====================================================
     # /START
     # =====================================================
@@ -135,16 +142,22 @@ def main():
     )
 
     # =====================================================
-    # ONBOARDING CALLBACKS
+    # DAY CALLBACKS
     # =====================================================
+
     app.add_handler(
         CallbackQueryHandler(
             day_callback_router,
-            pattern=r"^(day_habit_\d+|day_morning|day_evening|go_menu|day_no_action)$"
+            pattern=(
+                r"^(day_habit_\d+|day_morning|"
+                r"day_evening|go_menu|day_no_action)$"
+            )
         )
-    )  
-    
+    )
 
+    # =====================================================
+    # GOAL CALLBACKS
+    # =====================================================
 
     app.add_handler(
         CallbackQueryHandler(
@@ -152,15 +165,6 @@ def main():
             pattern=r"goal_review_achieved|goal_review_continue|goal_review_back"
         )
     )
-
-    
-    app.add_handler(
-        CallbackQueryHandler(
-            habit_review_callback,
-            pattern=r"^(habit_review_(formed|continue)_\d+|bad_habit_(controlled|continue)_\d+)$"
-        )
-    )
-
 
     app.add_handler(
         CallbackQueryHandler(
@@ -176,46 +180,73 @@ def main():
             )
         )
     )
-    
+
+    # =====================================================
+    # HABIT REVIEWS
+    # =====================================================
+
+    app.add_handler(
+        CallbackQueryHandler(
+            habit_review_callback,
+            pattern=(
+                r"^(habit_review_(formed|continue)_\d+|"
+                r"bad_habit_(controlled|continue)_\d+)$"
+            )
+        )
+    )
+
+    # =====================================================
+    # PROGRESS
+    # =====================================================
 
     app.add_handler(
         CallbackQueryHandler(
             progress_callback_router,
-            pattern=r"^(open_progress|progress_achievements|progress_history|progress_weekly|back_to_progress|go_menu)$"
-        )   
-    )
-    
-    app.add_handler(
-    CallbackQueryHandler(
-        onboarding_callback_router,
-        pattern=(
-            r"^(start_intro|why_intro|back_to_start|"
-            r"age_under_18|age_18_25|age_26_35|age_35_plus|"
-            r"good_frequency_daily|good_frequency_weekdays|"
-            r"good_frequency_custom|"
-            r"bad_habit_yes|bad_habit_no|"
-            r"bad_frequency_daily|bad_frequency_weekdays|"
-            r"bad_frequency_custom|"
-            r"oath_accept|open_main_menu)$"
-            ),
+            pattern=(
+                r"^(open_progress|progress_achievements|"
+                r"progress_history|progress_weekly|"
+                r"back_to_progress|go_menu)$"
+            )
         )
     )
-    
+
+    # =====================================================
+    # ONBOARDING CALLBACKS
+    # =====================================================
+
+    app.add_handler(
+        CallbackQueryHandler(
+            onboarding_callback_router,
+            pattern=(
+                r"^(start_intro|why_intro|back_to_start|"
+                r"age_under_18|age_18_25|age_26_35|age_35_plus|"
+                r"good_frequency_daily|good_frequency_weekdays|"
+                r"good_frequency_custom|"
+                r"bad_habit_yes|bad_habit_no|"
+                r"bad_frequency_daily|bad_frequency_weekdays|"
+                r"bad_frequency_custom|"
+                r"oath_accept|open_main_menu)$"
+            )
+        )
+    )
+
+    # =====================================================
+    # SETTINGS
+    # =====================================================
+
     app.add_handler(
         CallbackQueryHandler(
             show_sleep_settings,
             pattern="^settings_sleep$"
         )
     )
-    
-    
+
     app.add_handler(
         CallbackQueryHandler(
             change_wake_time,
             pattern="^change_wake_time$"
         )
     )
-
 
     app.add_handler(
         CallbackQueryHandler(
@@ -231,28 +262,11 @@ def main():
         )
     )
 
-    
-
     app.add_handler(
         CallbackQueryHandler(
-            delay_morning_checkin,
-            pattern="^delay_morning_checkin$"
+            show_notification_settings,
+            pattern="^settings_notifications$"
         )
-    )
-    
-
-    app.add_handler(
-        CallbackQueryHandler(
-            delay_evening_checkin,
-            pattern="^delay_evening_checkin$"
-        )
-    )
-
-    app.add_handler(
-    CallbackQueryHandler(
-        show_notification_settings,
-        pattern="^settings_notifications$"
-    )
     )
 
     app.add_handler(
@@ -269,22 +283,49 @@ def main():
         )
     )
 
+    # =====================================================
+    # DELAY NOTIFICATIONS
+    # =====================================================
 
     app.add_handler(
-    CallbackQueryHandler(
-        show_day,
-        pattern="^open_day$"
+        CallbackQueryHandler(
+            delay_morning_checkin,
+            pattern="^delay_morning_checkin$"
+        )
+    )
+
+    app.add_handler(
+        CallbackQueryHandler(
+            delay_evening_checkin,
+            pattern="^delay_evening_checkin$"
+        )
+    )
+
+    # =====================================================
+    # WEEKLY REPORT TEST
+    # =====================================================
+
+    app.add_handler(
+        CommandHandler(
+            "reporttest",
+            test_weekly_report
+        )
+    )
+
+    # =====================================================
+    # DAY
+    # =====================================================
+
+    app.add_handler(
+        CallbackQueryHandler(
+            show_day,
+            pattern="^open_day$"
         )
     )
 
     # =====================================================
     # ТЕКСТОВЫЕ СООБЩЕНИЯ
     # =====================================================
-    #
-    # Один общий роутер.
-    # Он сам смотрит onboarding_step и решает,
-    # какой обработчик должен получить сообщение.
-    #
 
     app.add_handler(
         MessageHandler(
@@ -294,10 +335,16 @@ def main():
     )
 
     # =====================================================
-    # START
+    # ЗАПУСК
     # =====================================================
 
-    print("🚀 Дэн v2 запущен")
+    logger.info(
+        "🚀 Дэн v2 запускается"
+    )
+
+    print(
+        "🚀 Дэн v2 запущен"
+    )
 
     try:
 
@@ -307,17 +354,15 @@ def main():
 
     except Exception as error:
 
+        logger.exception(
+            "КРИТИЧЕСКАЯ ОШИБКА ПРИ ЗАПУСКЕ ДЭНА"
+        )
+
         print()
         print(
             get_friendly_error(error)
         )
         print()
-
-        import logging
-
-        logging.exception(
-            "Ошибка при запуске Дэна"
-        )
 
 
 # =========================================================

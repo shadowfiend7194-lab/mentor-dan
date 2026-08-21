@@ -1,5 +1,7 @@
 from datetime import datetime, timedelta
 
+from zoneinfo import ZoneInfo
+
 from telegram import (
     InlineKeyboardButton,
     InlineKeyboardMarkup,
@@ -17,6 +19,8 @@ from database.habits import (
     mark_habit_reviewed,
 )
 
+from handlers.progress.weekly_report import generate_weekly_report
+from database.weekly_reports import save_weekly_report
 
 # =========================================================
 # ГЛАВНАЯ ПРОВЕРКА УВЕДОМЛЕНИЙ
@@ -48,7 +52,9 @@ async def check_notifications(
 
     conn.close()
 
-    now = datetime.now()
+    now = datetime.now(
+        ZoneInfo("Europe/Moscow")
+    )
 
     today = now.strftime(
         "%Y-%m-%d"
@@ -97,8 +103,17 @@ async def check_notifications(
                 + notify.minute
             )
 
+            # Окно утреннего уведомления:
+            # отправляем только в течение часа после времени подъёма
+
+            morning_window_end = (
+                notify_minutes
+                + 60
+            )
+
+
             if (
-                current_minutes >= notify_minutes
+                notify_minutes <= current_minutes <= morning_window_end
                 and morning_sent != today
             ):
 
@@ -175,7 +190,11 @@ async def check_notifications(
             user_id,
             name
         )
-
+        
+        await check_weekly_report(
+            context,
+            user_id
+        )
 
 # =========================================================
 # ПРОВЕРКА ЦЕЛИ
@@ -644,3 +663,73 @@ async def check_habit_reviews(
             habit["id"],
             today_str
         )
+
+
+async def check_weekly_report(
+    context,
+    user_id
+):
+
+    now = datetime.now()
+
+    today = now.strftime(
+        "%Y-%m-%d"
+    )
+
+    if (
+        now.weekday() != 6
+        or now.hour != 21
+    ):
+        return
+
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    cursor.execute(
+        """
+        SELECT weekly_report_sent
+        FROM users
+        WHERE user_id = ?
+        """,
+        (user_id,)
+    )
+
+    row = cursor.fetchone()
+
+    conn.close()
+
+    if row and row[0] == today:
+        return
+
+    text = generate_weekly_report(
+        user_id
+    )
+
+    save_weekly_report(
+        user_id,
+        text
+    )
+
+    await context.bot.send_message(
+        chat_id=user_id,
+        text=text,
+        parse_mode="HTML"
+    )
+
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    cursor.execute(
+        """
+        UPDATE users
+        SET weekly_report_sent = ?
+        WHERE user_id = ?
+        """,
+        (
+            today,
+            user_id
+        )
+    )
+
+    conn.commit()
+    conn.close()

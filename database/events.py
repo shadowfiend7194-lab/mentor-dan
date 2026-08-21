@@ -23,7 +23,7 @@ def add_event(
 
     cursor.execute(
         """
-        INSERT INTO user_events
+        INSERT OR IGNORE INTO user_events
         (
             user_id,
             event_type,
