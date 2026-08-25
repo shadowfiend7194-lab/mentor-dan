@@ -468,77 +468,47 @@ def is_completed_today(
 # СЕРИЯ
 # =========================================================
 
-def get_habit_streak(
-    habit_id
-):
+def get_habit_streak(habit_id):
 
     conn = get_connection()
     cursor = conn.cursor()
 
-
     cursor.execute(
         """
         SELECT date
-
         FROM habit_logs
-
         WHERE habit_id = ?
-
         AND completed = 1
-
         ORDER BY date DESC
-
         """,
-        (
-            habit_id,
-        )
+        (habit_id,)
     )
-
 
     rows = cursor.fetchall()
 
-
     conn.close()
-
 
     if not rows:
         return 0
 
-
-
     completed_dates = {
-
         datetime.strptime(
             row[0],
             "%Y-%m-%d"
         ).date()
-
         for row in rows
-
     }
 
-
-
     streak = 0
-
     current = date.today()
 
+    while current in completed_dates:
 
+        streak += 1
 
-    # смотрим последние 365 дней
-    for _ in range(365):
-
-        if current in completed_dates:
-
-            streak += 1
-
-        current -= timedelta(
-            days=1
-        )
-
+        current -= timedelta(days=1)
 
     return streak
-
 
 
 # =========================================================
@@ -757,22 +727,13 @@ def mark_habit_removed(
     cursor.execute(
         """
         UPDATE habits
-
-        SET
-            removed = 1,
-            removed_at = ?
-
-        WHERE
-            id = ?
-            AND user_id = ?
-
+        SET active = 0
+        WHERE id = ?
+        AND user_id = ?
         """,
         (
-            datetime.now().strftime(
-                "%Y-%m-%d %H:%M:%S"
-            ),
             habit_id,
-            user_id
+            user_id,
         )
     )
 

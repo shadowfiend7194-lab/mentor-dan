@@ -1,11 +1,14 @@
 import logging
 import os
 
+from telegram import Update
+
 from telegram.ext import (
     Application,
     CommandHandler,
     MessageHandler,
     CallbackQueryHandler,
+    ContextTypes,
     filters,
 )
 
@@ -35,7 +38,19 @@ from handlers.settings import (
     show_notification_settings,
     toggle_morning_notifications,
     toggle_evening_notifications,
+    start_feedback,
+    cancel_feedback,
+    show_dan_memory,
+    confirm_delete_user_data,
+    cancel_delete_user_data,
+    confirm_delete_all_user_data,
 )
+
+from handlers.dan.router import (
+    dan_text_router,
+    open_dan,
+)
+
 
 from handlers.menu import (
     menu_text,
@@ -59,6 +74,9 @@ from handlers.habit_review import (
 
 from handlers.progress.test_report import test_weekly_report
 
+from handlers.feedback import (
+    handle_feedback_message,
+)
 
 # =========================================================
 # ЛОГИРОВАНИЕ
@@ -130,6 +148,29 @@ def main():
         first=10
     )
 
+    # =========================================================
+    # /RESET_TEST — СБРОС ОНБОРДИНГА ДЛЯ ТЕСТИРОВАНИЯ
+    # =========================================================
+
+    async def reset_test(
+        update: Update,
+        context: ContextTypes.DEFAULT_TYPE
+    ):
+
+        context.user_data.clear()
+
+        context.user_data[
+            "reset_onboarding_test"
+        ] = True
+
+        await update.message.reply_text(
+            "🔄 Тестовый режим включён.\n\n"
+            "Теперь отправь /start — онбординг "
+            "запустится заново.\n\n"
+            "Данные пользователя, цели, привычки "
+            "и память Дэна не удаляются."
+        )
+
     # =====================================================
     # /START
     # =====================================================
@@ -140,6 +181,19 @@ def main():
             start
         )
     )
+    
+
+    # =====================================================
+    # /RESET_TEST
+    # =====================================================
+
+    app.add_handler(
+        CommandHandler(
+            "reset_test",
+            reset_test
+        )
+    )
+
 
     # =====================================================
     # DAY CALLBACKS
@@ -282,6 +336,49 @@ def main():
             pattern="^toggle_evening_notifications$"
         )
     )
+    
+    app.add_handler(
+        CallbackQueryHandler(
+            start_feedback,
+            pattern=r"^(suggest_feature|report_problem)$"
+        )
+    )
+
+    app.add_handler(
+        CallbackQueryHandler(
+            cancel_feedback,
+            pattern="^feedback_cancel$"
+        )
+    )
+
+    app.add_handler(
+        CallbackQueryHandler(
+            show_dan_memory,
+            pattern="^settings_memory$"
+        )
+    )
+
+    app.add_handler(
+        CallbackQueryHandler(
+            confirm_delete_user_data,
+            pattern="^delete_my_data$"
+        )
+    )
+
+    app.add_handler(
+        CallbackQueryHandler(
+            cancel_delete_user_data,
+            pattern="^cancel_delete_data$"
+        )
+    )
+
+    app.add_handler(
+        CallbackQueryHandler(
+            confirm_delete_all_user_data,
+            pattern="^confirm_delete_all$"
+        )
+    )
+
 
     # =====================================================
     # DELAY NOTIFICATIONS
@@ -322,9 +419,37 @@ def main():
             pattern="^open_day$"
         )
     )
+    # =====================================================
+    # ОБРАТНАЯ СВЯЗЬ
+    # =====================================================
+
+    app.add_handler(
+        MessageHandler(
+            (
+                (filters.TEXT & ~filters.COMMAND)
+                | filters.PHOTO
+            ),
+            handle_feedback_message
+        ),
+        group=1
+    )
+
 
     # =====================================================
-    # ТЕКСТОВЫЕ СООБЩЕНИЯ
+    # ТЕКСТОВЫЕ КНОПКИ ГЛАВНОГО МЕНЮ
+    # =====================================================
+
+    app.add_handler(
+        MessageHandler(
+            filters.Regex(
+                r"^(📅 Мой день|🎯 Моя цель|📊 Мой прогресс|💬 Дэн|⚙️ Настройки|⭐ PRO)$"
+            ),
+            menu_text
+        )
+    )
+
+    # =====================================================
+    # ОСТАЛЬНЫЕ ТЕКСТОВЫЕ СООБЩЕНИЯ
     # =====================================================
 
     app.add_handler(

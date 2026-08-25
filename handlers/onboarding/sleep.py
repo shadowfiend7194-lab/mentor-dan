@@ -34,7 +34,6 @@ async def start_sleep_setup(
         "onboarding_step"
     ] = "wake_time"
 
-
     await update.effective_message.reply_text(
         "🌅 Отлично. Теперь настроим твой режим дня.\n\n"
         "Во сколько ты обычно просыпаешься? ⏰\n\n"
@@ -55,13 +54,11 @@ async def handle_wake_time(
     if not update.message:
         return
 
-
     text = update.message.text.strip()
 
     wake_time = parse_time(
         text
     )
-
 
     if wake_time is None:
 
@@ -73,16 +70,13 @@ async def handle_wake_time(
 
         return
 
-
     context.user_data[
         "wake_time"
     ] = wake_time
 
-
     context.user_data[
         "onboarding_step"
     ] = "sleep_time"
-
 
     await update.message.reply_text(
         f"✅ Записал: подъём в <b>{wake_time}</b>.\n\n"
@@ -105,13 +99,11 @@ async def handle_sleep_time(
     if not update.message:
         return
 
-
     text = update.message.text.strip()
 
     sleep_time = parse_time(
         text
     )
-
 
     if sleep_time is None:
 
@@ -123,11 +115,9 @@ async def handle_sleep_time(
 
         return
 
-
     context.user_data[
         "sleep_time"
     ] = sleep_time
-
 
     # =====================================================
     # СОХРАНЯЕМ ПОЛЬЗОВАТЕЛЯ В БД
@@ -138,7 +128,6 @@ async def handle_sleep_time(
         name=context.user_data.get("name"),
         age=context.user_data.get("age"),
     )
-    
 
     update_sleep_settings(
         user_id=update.effective_user.id,
@@ -150,12 +139,10 @@ async def handle_sleep_time(
         update.effective_user.id
     )
 
-
     print(
         "💾 USER SAVED:",
         saved_user
     )
-
 
     # =====================================================
     # СОБЫТИЕ: НАЧАЛО ПУТИ
@@ -171,7 +158,6 @@ async def handle_sleep_time(
         )
     )
 
-
     # =====================================================
     # СОЗДАЁМ УВЕДОМЛЕНИЯ
     # =====================================================
@@ -183,11 +169,13 @@ async def handle_sleep_time(
         sleep_time
     )
 
+    # =====================================================
+    # ОНБОРДИНГ ЗАВЕРШЁН
+    # =====================================================
 
     context.user_data[
         "onboarding_step"
     ] = "finish"
-
 
     keyboard = [
         [
@@ -198,6 +186,9 @@ async def handle_sleep_time(
         ]
     ]
 
+    # =====================================================
+    # ФИНАЛЬНОЕ СООБЩЕНИЕ
+    # =====================================================
 
     await update.message.reply_text(
         "🌙 Отлично, записал.\n\n"

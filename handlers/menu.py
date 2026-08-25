@@ -39,7 +39,7 @@ async def show_menu(
 
     await update.effective_message.reply_text(
         "🏠 Главное меню\n\n"
-        "Я здесь. Выбирай, с чего начнём 👇",
+        "Я здесь. Выбирай раздел 👇",
         reply_markup=reply_markup
     )
 
@@ -118,6 +118,19 @@ async def show_settings(
             InlineKeyboardButton(
                 "🧠 Память Дэна",
                 callback_data="settings_memory"
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                "💡 Предложить функцию",
+                callback_data="suggest_feature"
+            )
+        ],
+
+        [
+            InlineKeyboardButton(
+                "🐞 Сообщить о проблеме",
+                callback_data="report_problem"
             )
         ],
         [
@@ -229,11 +242,22 @@ async def menu_text(
 
     if text == "💬 Дэн":
 
-        from handlers.dan import dan_chat
+        
+        from handlers.dan.router import open_dan
 
-        await dan_chat(
-            update,
-            context
+        context.user_data["dan_active"] = True
+
+        await update.message.reply_text(
+            "🧠 <b>Дэн</b>\n\n"
+            "Я твой персональный наставник.\n\n"
+            "Здесь ты можешь свободно писать мне "
+            "о своих целях, дисциплине, привычках, "
+            "состоянии или проблемах.\n\n"
+            "Я буду учитывать то, что уже знаю о тебе, "
+            "и помогать тебе двигаться вперёд "
+            "без лишнего давления.\n\n"
+            "Пиши.",
+            parse_mode="HTML"
         )
 
         return

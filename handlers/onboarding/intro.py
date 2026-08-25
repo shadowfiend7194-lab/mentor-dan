@@ -21,7 +21,7 @@ async def start_intro(
     if not query:
         return
 
-    await query.answer()
+    
 
     context.user_data["onboarding"] = True
     context.user_data["onboarding_step"] = "name"
@@ -46,7 +46,7 @@ async def why_intro(
     if not query:
         return
 
-    await query.answer()
+    
 
     keyboard = [
         [
@@ -82,7 +82,7 @@ async def back_to_start(
     if not query:
         return
 
-    await query.answer()
+    
 
     keyboard = [
         [

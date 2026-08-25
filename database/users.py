@@ -408,3 +408,160 @@ def user_exists(
 
 
     return result is not None
+
+# =========================================================
+# ПОЛНОЕ УДАЛЕНИЕ ДАННЫХ ПОЛЬЗОВАТЕЛЯ
+# =========================================================
+
+def delete_user_data(
+    user_id
+):
+
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    try:
+
+        # -------------------------------------------------
+        # HABIT LOGS
+        # -------------------------------------------------
+        cursor.execute(
+            """
+            DELETE FROM habit_logs
+
+            WHERE habit_id IN (
+                SELECT id
+                FROM habits
+                WHERE user_id = ?
+            )
+            """,
+            (
+                user_id,
+            )
+        )
+
+        # -------------------------------------------------
+        # HABITS
+        # -------------------------------------------------
+        cursor.execute(
+            """
+            DELETE FROM habits
+
+            WHERE user_id = ?
+            """,
+            (
+                user_id,
+            )
+        )
+
+        # -------------------------------------------------
+        # CHECKINS
+        # -------------------------------------------------
+        cursor.execute(
+            """
+            DELETE FROM checkins
+
+            WHERE user_id = ?
+            """,
+            (
+                user_id,
+            )
+        )
+
+        # -------------------------------------------------
+        # CHECK-IN HISTORY
+        # -------------------------------------------------
+        cursor.execute(
+            """
+            DELETE FROM checkin_history
+
+            WHERE user_id = ?
+            """,
+            (
+                user_id,
+            )
+        )
+
+        # -------------------------------------------------
+        # GOALS
+        # -------------------------------------------------
+        cursor.execute(
+            """
+            DELETE FROM goals
+
+            WHERE user_id = ?
+            """,
+            (
+                user_id,
+            )
+        )
+
+        # -------------------------------------------------
+        # WEEKLY REPORTS
+        # -------------------------------------------------
+        cursor.execute(
+            """
+            DELETE FROM weekly_reports
+
+            WHERE user_id = ?
+            """,
+            (
+                user_id,
+            )
+        )
+
+        # -------------------------------------------------
+        # ДЭН — ИСТОРИЯ ПЕРЕПИСКИ
+        # -------------------------------------------------
+        cursor.execute(
+            """
+            DELETE FROM dan_messages
+
+            WHERE user_id = ?
+            """,
+            (
+                user_id,
+            )
+        )
+
+        # -------------------------------------------------
+        # ДЭН — ДОЛГОСРОЧНАЯ ПАМЯТЬ
+        # -------------------------------------------------
+        cursor.execute(
+            """
+            DELETE FROM dan_memory
+
+            WHERE user_id = ?
+            """,
+            (
+                user_id,
+            )
+        )
+
+        # -------------------------------------------------
+        # ПОЛЬЗОВАТЕЛЬ
+        # -------------------------------------------------
+        cursor.execute(
+            """
+            DELETE FROM users
+
+            WHERE user_id = ?
+            """,
+            (
+                user_id,
+            )
+        )
+
+        conn.commit()
+
+        return True
+
+    except Exception:
+
+        conn.rollback()
+
+        raise
+
+    finally:
+
+        conn.close()

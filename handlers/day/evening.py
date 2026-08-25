@@ -55,6 +55,10 @@ async def start_evening_checkin(
 # ОБРАБОТКА ВСЕХ ТЕКСТОВ ВЕЧЕРНЕГО ЧЕК-ИНА
 # =========================================================
 
+# =========================================================
+# ОБРАБОТКА ВСЕХ ТЕКСТОВ ВЕЧЕРНЕГО ЧЕК-ИНА
+# =========================================================
+
 async def handle_evening_text(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE
@@ -87,36 +91,40 @@ async def handle_evening_text(
             "evening_score"
         ] = score
 
-        # Ветка 8-10
+        # =================================================
+        # 7–10 — БЕЗ ДОПОЛНИТЕЛЬНЫХ ВОПРОСОВ
+        # =================================================
 
-        if score >= 8:
+        if score >= 7:
+
+            await finish_evening(
+                update,
+                context
+            )
+
+            return True
+
+        # =================================================
+        # 4–6 — ОДИН ВОПРОС
+        # =================================================
+
+        elif score >= 4:
 
             context.user_data[
                 "evening_step"
-            ] = "high_reflection"
+            ] = "normal_reflection"
 
             await update.message.reply_text(
-                "🔥 Хороший день.\n\n"
-                "Что сегодня получилось лучше всего?\n\n"
-                "Напиши своими словами.",
+                "💭 Что сегодня сильнее всего повлияло "
+                "на твою оценку дня?",
                 reply_markup=ReplyKeyboardRemove()
             )
 
-        # Ветка 5-7
+            return True
 
-        elif score >= 5:
-
-            context.user_data[
-                "evening_step"
-            ] = "normal_positive"
-
-            await update.message.reply_text(
-                "👍 Нормальный день.\n\n"
-                "Что сегодня получилось хорошо? 💭",
-                reply_markup=ReplyKeyboardRemove()
-            )
-
-        # Ветка 1-4
+        # =================================================
+        # 1–3 — ПЕРВЫЙ ВОПРОС
+        # =================================================
 
         else:
 
@@ -125,20 +133,18 @@ async def handle_evening_text(
             ] = "low_reason"
 
             await update.message.reply_text(
-                "🫂 Сегодня день, похоже, "
-                "был непростым.\n\n"
-                "Что больше всего помешало тебе "
-                "провести его так, как хотелось?",
+                "🌙 Что сегодня больше всего выбило "
+                "день из колеи?",
                 reply_markup=ReplyKeyboardRemove()
             )
 
-        return True
+            return True
 
     # -----------------------------------------------------
-    # ХОРОШИЙ ДЕНЬ
+    # 4–6 — ЕДИНСТВЕННЫЙ ВОПРОС
     # -----------------------------------------------------
 
-    if step == "high_reflection":
+    if step == "normal_reflection":
 
         context.user_data[
             "evening_positive"
@@ -152,46 +158,7 @@ async def handle_evening_text(
         return True
 
     # -----------------------------------------------------
-    # СРЕДНИЙ ДЕНЬ — ПЕРВЫЙ ВОПРОС
-    # -----------------------------------------------------
-
-    if step == "normal_positive":
-
-        context.user_data[
-            "evening_positive"
-        ] = update.message.text
-
-        context.user_data[
-            "evening_step"
-        ] = "normal_improve"
-
-        await update.message.reply_text(
-            "🚀 А что завтра можно сделать "
-            "немного лучше?\n\n"
-            "Достаточно одного небольшого шага."
-        )
-
-        return True
-
-    # -----------------------------------------------------
-    # СРЕДНИЙ ДЕНЬ — ВТОРОЙ ВОПРОС
-    # -----------------------------------------------------
-
-    if step == "normal_improve":
-
-        context.user_data[
-            "evening_improve"
-        ] = update.message.text
-
-        await finish_evening(
-            update,
-            context
-        )
-
-        return True
-
-    # -----------------------------------------------------
-    # ПЛОХОЙ ДЕНЬ — ПРИЧИНА
+    # 1–3 — ПЕРВЫЙ ВОПРОС
     # -----------------------------------------------------
 
     if step == "low_reason":
@@ -202,40 +169,17 @@ async def handle_evening_text(
 
         context.user_data[
             "evening_step"
-        ] = "low_good"
-
-        await update.message.reply_text(
-            "💭 Несмотря на всё это,\n"
-            "что сегодня всё-таки получилось?\n\n"
-            "Даже что-то совсем небольшое."
-        )
-
-        return True
-
-    # -----------------------------------------------------
-    # ПЛОХОЙ ДЕНЬ — ЧТО ПОЛУЧИЛОСЬ
-    # -----------------------------------------------------
-
-    if step == "low_good":
-
-        context.user_data[
-            "evening_positive"
-        ] = update.message.text
-
-        context.user_data[
-            "evening_step"
         ] = "low_tomorrow"
 
         await update.message.reply_text(
-            "🌅 И последнее.\n\n"
-            "Что ты хочешь изменить завтра,\n"
-            "чтобы день прошёл немного лучше?"
+            "🌅 А что завтра можно сделать иначе, "
+            "чтобы день прошёл хотя бы немного лучше?"
         )
 
         return True
 
     # -----------------------------------------------------
-    # ПЛОХОЙ ДЕНЬ — ШАГ НА ЗАВТРА
+    # 1–3 — ВТОРОЙ ВОПРОС
     # -----------------------------------------------------
 
     if step == "low_tomorrow":
@@ -276,7 +220,8 @@ async def finish_evening(
             "Не останавливайся на этом — "
             "так держать и завтра! 🔥\n\n"
             "Именно из таких дней "
-            "строится дисциплина. 👣"
+            "строится дисциплина. 👣\n\n"
+            "Сладких снов 🌙"
         )
 
     elif score >= 5:
@@ -286,7 +231,7 @@ async def finish_evening(
             "Ты остановился и посмотрел "
             "на свой день.\n\n"
             "Именно так появляется стабильность. 💪\n\n"
-            "Продолжаем завтра. 👊"
+            "Продолжаем завтра. Спокойной ночи!🌙"
         )
 
     else:
@@ -297,7 +242,7 @@ async def finish_evening(
             "Плохой день — это не провал.\n\n"
             "Главное — выбрать один шаг "
             "и сделать его завтра. 👣\n\n"
-            "Ты справишься. 🔥"
+            "А сейчас востанавливайся. Спокойной ночи!🌙"
         )
 
     await update.message.reply_text(

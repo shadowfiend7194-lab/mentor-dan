@@ -9,27 +9,45 @@ async def start(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE
 ):
+
     print("🔥 START HANDLER WORKS")
 
     user_id = update.effective_user.id
+
     print(f"👤 USER ID: {user_id}")
 
     user = get_user(user_id)
+
     print(f"🗄️ USER FROM DB: {user}")
 
+    # =====================================================
+    # ТЕСТОВЫЙ РЕЖИМ
+    # =====================================================
 
-    print("🔥 START HANDLER WORKS")
+    test_reset = context.user_data.get(
+        "reset_onboarding_test"
+    )
 
-    user_id = update.effective_user.id
+    if test_reset:
 
-    # Проверяем, есть ли пользователь в базе
-    user = get_user(user_id)
+        context.user_data.pop(
+            "reset_onboarding_test",
+            None
+        )
+
+        context.user_data[
+            "onboarding_step"
+        ] = None
+
+        print(
+            "🧪 TEST MODE: запускаем онбординг заново"
+        )
 
     # =====================================================
     # СТАРЫЙ ПОЛЬЗОВАТЕЛЬ
     # =====================================================
 
-    if user:
+    elif user:
 
         name = user.get("name") or "друг"
 
@@ -47,7 +65,7 @@ async def start(
         return
 
     # =====================================================
-    # НОВЫЙ ПОЛЬЗОВАТЕЛЬ
+    # НОВЫЙ / ТЕСТОВЫЙ ПОЛЬЗОВАТЕЛЬ
     # =====================================================
 
     keyboard = [
@@ -75,5 +93,7 @@ async def start(
         "и превращать их в результат.\n\n"
         "Перед началом хочу немного узнать тебя.\n\n"
         "Готов? 🚀",
-        reply_markup=InlineKeyboardMarkup(keyboard)
+        reply_markup=InlineKeyboardMarkup(
+            keyboard
+        )
     )

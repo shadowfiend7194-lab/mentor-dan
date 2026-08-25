@@ -228,8 +228,85 @@ def migrate():
 
 
     # =====================================================
-    # СОХРАНЕНИЕ
+    # DENA — ИСТОРИЯ ПЕРЕПИСКИ
     # =====================================================
+
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS dan_messages (
+
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+            user_id INTEGER NOT NULL,
+
+            role TEXT NOT NULL,
+
+            message TEXT NOT NULL,
+
+            created_at TEXT NOT NULL
+
+        )
+        """
+    )
+
+
+    # =====================================================
+    # DENA — ДОЛГОСРОЧНАЯ ПАМЯТЬ
+    # =====================================================
+
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS dan_memory (
+
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+            user_id INTEGER NOT NULL,
+
+            memory_key TEXT NOT NULL,
+
+            memory_value TEXT NOT NULL,
+
+            importance INTEGER DEFAULT 5,
+
+            created_at TEXT NOT NULL,
+
+            updated_at TEXT NOT NULL
+
+        )
+        """
+    )
+
+
+    # =====================================================
+    # ИНДЕКСЫ DENA
+    # =====================================================
+
+    cursor.execute(
+        """
+        CREATE INDEX IF NOT EXISTS
+        idx_dan_messages_user
+        ON dan_messages(user_id)
+        """
+    )
+
+
+    cursor.execute(
+        """
+        CREATE INDEX IF NOT EXISTS
+        idx_dan_messages_user_date
+        ON dan_messages(user_id, created_at)
+        """
+    )
+
+
+    cursor.execute(
+        """
+        CREATE INDEX IF NOT EXISTS
+        idx_dan_memory_user
+        ON dan_memory(user_id)
+        """
+    )
+
 
     conn.commit()
     conn.close()

@@ -1,6 +1,12 @@
-from telegram import Update
+from telegram import (
+    Update,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+)
 
 from telegram.ext import ContextTypes
+
+from handlers.dan.router import dan_text_router
 
 from handlers.onboarding.intro import (
     start_intro,
@@ -80,7 +86,6 @@ async def onboarding_callback_router(
     except Exception:
         pass
 
-
     # =====================================================
     # СТАРТОВЫЕ КНОПКИ
     # =====================================================
@@ -94,7 +99,6 @@ async def onboarding_callback_router(
 
         return
 
-
     if data == "why_intro":
 
         await why_intro(
@@ -104,7 +108,6 @@ async def onboarding_callback_router(
 
         return
 
-
     if data == "back_to_start":
 
         await back_to_start(
@@ -113,7 +116,6 @@ async def onboarding_callback_router(
         )
 
         return
-
 
     # =====================================================
     # ВОЗРАСТ
@@ -133,7 +135,6 @@ async def onboarding_callback_router(
 
         return
 
-
     # =====================================================
     # ХОРОШАЯ ПРИВЫЧКА — ПЕРИОДИЧНОСТЬ
     # =====================================================
@@ -151,7 +152,6 @@ async def onboarding_callback_router(
 
         return
 
-
     # =====================================================
     # ПЛОХАЯ ПРИВЫЧКА — ЕСТЬ / НЕТ
     # =====================================================
@@ -167,7 +167,6 @@ async def onboarding_callback_router(
         )
 
         return
-
 
     # =====================================================
     # ПЛОХАЯ ПРИВЫЧКА — ПЕРИОДИЧНОСТЬ
@@ -186,7 +185,6 @@ async def onboarding_callback_router(
 
         return
 
-
     # =====================================================
     # КЛЯТВА
     # =====================================================
@@ -200,7 +198,6 @@ async def onboarding_callback_router(
 
         return
 
-
     # =====================================================
     # ГЛАВНОЕ МЕНЮ ПОСЛЕ ОНБОРДИНГА
     # =====================================================
@@ -211,9 +208,56 @@ async def onboarding_callback_router(
             "onboarding_step"
         ] = "completed"
 
-        await show_menu(
-            update,
-            context
+        context.user_data[
+            "menu_intro_shown"
+        ] = True
+
+        keyboard = [
+            [
+                InlineKeyboardButton(
+                    "🏠 Открыть главное меню",
+                    callback_data="go_menu"
+                )
+            ]
+        ]
+
+        await query.message.reply_text(
+            "🧠 <b>Теперь коротко о том, что здесь есть.</b>\n\n"
+
+            "📅 <b>Мой день</b>\n"
+            "Твои привычки и ежедневные чек-ины. "
+            "Здесь отмечаешь, как проходит твой день "
+            "и что удалось выполнить.\n\n"
+
+            "🎯 <b>Моя цель</b>\n"
+            "Работа с главной целью и привычками, "
+            "которые помогают к ней прийти.\n\n"
+
+            "📊 <b>Мой прогресс</b>\n"
+            "Статистика, достижения, история пути "
+            "и недельный анализ твоих изменений.\n\n"
+
+            "💬 <b>Дэн</b>\n"
+            "Мой личный диалог с тобой. "
+            "Можешь рассказать, что происходит, "
+            "попросить совета или просто поговорить "
+            "по делу. Я буду учитывать то, что уже знаю о тебе.\n\n"
+
+            "⚙️ <b>Настройки</b>\n"
+            "Режим сна, уведомления и память Дэна.\n\n"
+
+            "⭐ <b>PRO</b>\n"
+            "Дополнительные возможности для более "
+            "глубокой работы над собой.\n\n"
+
+            "<b>Не нужно разбираться во всём сразу.</b>\n"
+            "Просто начинай пользоваться. "
+            "Остальное разберём по ходу. 🤝",
+
+            parse_mode="HTML",
+            reply_markup=InlineKeyboardMarkup(
+                keyboard
+            )
         )
 
         return
@@ -231,6 +275,41 @@ async def text_router(
     if not update.message:
         return
 
+    print("🔥 TEXT ROUTER WORKS")
+    print("💬 TEXT:", update.message.text)
+    print("🧠 DAN ACTIVE:", context.user_data.get("dan_active"))
+
+    # =====================================================
+    # ОБРАТНАЯ СВЯЗЬ
+    # =====================================================
+
+    if context.user_data.get("feedback_type"):
+
+        handled = await handle_feedback_message(
+            update,
+            context
+        )
+
+        if handled:
+            return
+        
+
+
+    # =====================================================
+    # ДЭН
+    # =====================================================
+
+    if context.user_data.get(
+        "dan_active"
+    ):
+
+        handled = await dan_text_router(
+            update,
+            context
+        )
+
+        if handled:
+            return
 
     # =====================================================
     # РЕЗУЛЬТАТ ДОСТИЖЕНИЯ ЦЕЛИ
@@ -243,7 +322,7 @@ async def text_router(
         from database.goals import (
             get_main_goal,
             achieve_goal,
-        )   
+        )
 
         from database.events import (
             add_event,
@@ -254,11 +333,9 @@ async def text_router(
         if not note:
             return
 
-
         goal = get_main_goal(
             update.effective_user.id
         )
-
 
         if not goal:
 
@@ -273,13 +350,11 @@ async def text_router(
 
             return
 
-
         achieve_goal(
             user_id=update.effective_user.id,
             goal_id=goal["id"],
             achievement_note=note,
         )
-
 
         # -------------------------------------------------
         # СОБЫТИЕ В ИСТОРИИ ПУТИ
@@ -295,12 +370,10 @@ async def text_router(
             )
         )
 
-
         context.user_data.pop(
             "goal_review_state",
             None
         )
-
 
         # -------------------------------------------------
         # ФИНАЛЬНОЕ СООБЩЕНИЕ ДЭНА
@@ -324,7 +397,6 @@ async def text_router(
             parse_mode="HTML"
         )
 
-
         # -------------------------------------------------
         # ВОЗВРАЩАЕМ В ГЛАВНОЕ МЕНЮ
         # -------------------------------------------------
@@ -335,7 +407,6 @@ async def text_router(
         )
 
         return
-
 
     # =====================================================
     # НАСТРОЙКИ — ИЗМЕНЕНИЕ ВРЕМЕНИ
@@ -353,7 +424,6 @@ async def text_router(
             update.message.text.strip()
         )
 
-
         if value is None:
 
             await update.message.reply_text(
@@ -362,16 +432,13 @@ async def text_router(
 
             return
 
-
         state = context.user_data.get(
             "settings_state"
         )
 
-
         from database.users import (
             update_sleep_settings,
         )
-
 
         if state == "wake_time":
 
@@ -380,7 +447,6 @@ async def text_router(
                 wake_time=value
             )
 
-
         if state == "sleep_time":
 
             update_sleep_settings(
@@ -388,17 +454,14 @@ async def text_router(
                 sleep_time=value
             )
 
-
         context.user_data.pop(
             "settings_state",
             None
         )
 
-
         from handlers.settings import (
             show_sleep_settings,
         )
-
 
         await show_sleep_settings(
             update,
@@ -406,7 +469,6 @@ async def text_router(
         )
 
         return
-
 
     # =====================================================
     # УТРЕННИЙ ЧЕК-ИН
@@ -423,7 +485,6 @@ async def text_router(
 
         return
 
-
     # =====================================================
     # ВЕЧЕРНИЙ ЧЕК-ИН
     # =====================================================
@@ -432,14 +493,12 @@ async def text_router(
         "checkin_type"
     ) == "evening":
 
-        handled = await handle_evening_text(
+        await handle_evening_text(
             update,
             context
         )
 
-        if handled:
-            return
-
+        return
 
     # =====================================================
     # ИЗМЕНЕНИЕ ЦЕЛИ
@@ -457,7 +516,6 @@ async def text_router(
         if handled:
             return
 
-
     # =====================================================
     # ИЗМЕНЕНИЕ НАЗВАНИЯ ПРИВЫЧКИ
     # =====================================================
@@ -473,7 +531,6 @@ async def text_router(
 
         if handled:
             return
-
 
     # =====================================================
     # СВОИ ДНИ ПРИВЫЧКИ
@@ -496,11 +553,9 @@ async def text_router(
         if handled:
             return
 
-
     step = context.user_data.get(
         "onboarding_step"
     )
-
 
     # =====================================================
     # ЕСЛИ ПОЛЬЗОВАТЕЛЬ УЖЕ ПРОШЁЛ ОНБОРДИНГ
@@ -515,7 +570,6 @@ async def text_router(
 
         return
 
-
     # =====================================================
     # ОНБОРДИНГ — ИМЯ
     # =====================================================
@@ -528,7 +582,6 @@ async def text_router(
         )
 
         return
-
 
     # =====================================================
     # ОНБОРДИНГ — ГЛАВНАЯ ЦЕЛЬ
@@ -543,7 +596,6 @@ async def text_router(
 
         return
 
-
     # =====================================================
     # ОНБОРДИНГ — ПОЛЕЗНАЯ ПРИВЫЧКА
     # =====================================================
@@ -556,7 +608,6 @@ async def text_router(
         )
 
         return
-
 
     # =====================================================
     # ОНБОРДИНГ — СВОИ ДНИ ПОЛЕЗНОЙ ПРИВЫЧКИ
@@ -571,7 +622,6 @@ async def text_router(
 
         return
 
-
     # =====================================================
     # ОНБОРДИНГ — НАЗВАНИЕ ПЛОХОЙ ПРИВЫЧКИ
     # =====================================================
@@ -584,7 +634,6 @@ async def text_router(
         )
 
         return
-
 
     # =====================================================
     # ОНБОРДИНГ — СВОИ ДНИ ПЛОХОЙ ПРИВЫЧКИ
@@ -599,7 +648,6 @@ async def text_router(
 
         return
 
-
     # =====================================================
     # ОНБОРДИНГ — ВРЕМЯ ПОДЪЁМА
     # =====================================================
@@ -613,7 +661,6 @@ async def text_router(
 
         return
 
-
     # =====================================================
     # ОНБОРДИНГ — ВРЕМЯ СНА
     # =====================================================
@@ -626,7 +673,6 @@ async def text_router(
         )
 
         return
-
 
     # =====================================================
     # ЕСЛИ НИЧЕГО НЕ СРАБОТАЛО
