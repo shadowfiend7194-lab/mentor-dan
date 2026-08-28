@@ -16,7 +16,6 @@ def get_habit_completion_stats(
     start_date,
     end_date,
 ):
-
     conn = get_connection()
     cursor = conn.cursor()
 
@@ -52,12 +51,10 @@ def get_habit_completion_stats(
     current = start_date
 
     while current <= end_date:
-
         if is_habit_scheduled_on_date(
             habit,
             current,
         ):
-
             scheduled += 1
 
             if logs.get(
@@ -88,10 +85,7 @@ def get_habit_completion_stats(
 # =========================================================
 
 def get_habit_analysis(user_id):
-
-    habits = get_user_habits(
-        user_id
-    )
+    habits = get_user_habits(user_id)
 
     today = date.today()
 
@@ -110,7 +104,6 @@ def get_habit_analysis(user_id):
     result = []
 
     for habit in habits:
-
         current = get_habit_completion_stats(
             habit,
             current_start,
@@ -132,13 +125,10 @@ def get_habit_analysis(user_id):
             {
                 "name": habit["name"],
                 "type": habit["habit_type"],
-
                 "formed": habit["formed"],
                 "controlled": habit["controlled"],
-
                 "current_week": current,
                 "previous_week": previous,
-
                 "change_percentage_points": change,
             }
         )
@@ -146,8 +136,11 @@ def get_habit_analysis(user_id):
     return result
 
 
-def get_checkin_trends(user_id):
+# =========================================================
+# ТРЕНДЫ CHECK-IN
+# =========================================================
 
+def get_checkin_trends(user_id):
     conn = get_connection()
     cursor = conn.cursor()
 
@@ -157,14 +150,22 @@ def get_checkin_trends(user_id):
         today - timedelta(days=13)
     )
 
+    # В текущей базе используются именно эти поля:
+    #
+    # morning_energy
+    # morning_sleep
+    # morning_mood
+    # morning_stress
+    # evening_score
+
     cursor.execute(
         """
         SELECT
             date,
-            energy,
-            sleep,
-            mood,
-            stress,
+            morning_energy,
+            morning_sleep,
+            morning_mood,
+            morning_stress,
             evening_score
         FROM checkins
         WHERE user_id = ?
@@ -188,12 +189,12 @@ def get_checkin_trends(user_id):
             "days": [],
             "current": {},
             "previous": {},
+            "changes": {},
         }
 
     days = []
 
     for row in rows:
-
         days.append(
             {
                 "date": row[0],
@@ -205,24 +206,23 @@ def get_checkin_trends(user_id):
             }
         )
 
+    current_start = (
+        today - timedelta(days=6)
+    ).isoformat()
+
     current_rows = [
         row
         for row in days
-        if row["date"] >= (
-            today - timedelta(days=6)
-        ).isoformat()
+        if row["date"] >= current_start
     ]
 
     previous_rows = [
         row
         for row in days
-        if row["date"] < (
-            today - timedelta(days=6)
-        ).isoformat()
+        if row["date"] < current_start
     ]
 
     def average(rows, key):
-
         values = [
             row[key]
             for row in rows
@@ -286,15 +286,12 @@ def get_checkin_trends(user_id):
     changes = {}
 
     for key in current:
-
         if (
             current[key] is not None
             and previous[key] is not None
         ):
-
             changes[key] = round(
-                current[key]
-                - previous[key],
+                current[key] - previous[key],
                 1,
             )
 

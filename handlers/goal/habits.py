@@ -10,6 +10,8 @@ from database.habits import (
     get_user_habits,
     parse_custom_days,
     format_frequency,
+    format_custom_days,
+    mark_habit_removed,
 )
 
 from database.connection import get_connection
@@ -25,6 +27,9 @@ async def open_habit_edit(
 ):
 
     query = update.callback_query
+
+    if not query:
+        return
 
     await query.answer()
 
@@ -43,6 +48,12 @@ async def open_habit_edit(
         ],
         [
             InlineKeyboardButton(
+                "🗑 Удалить привычку",
+                callback_data="habit_delete"
+            )
+        ],
+        [
+            InlineKeyboardButton(
                 "⬅️ Назад",
                 callback_data="goal_habits"
             )
@@ -50,18 +61,82 @@ async def open_habit_edit(
     ]
 
     await query.edit_message_text(
-        "✏️ <b>Выбери тип привычки</b>\n\n"
-        "Что хочешь изменить?",
+        "⚙️ <b>Управление привычками</b>\n\n"
+        "Здесь можно изменить или удалить "
+        "любую активную привычку.",
         parse_mode="HTML",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
 
 # =========================================================
-# СПИСКИ ПРИВЫЧЕК
+# ВЫБОР ПРИВЫЧКИ ДЛЯ УДАЛЕНИЯ
 # =========================================================
 
-async def open_good_habits(update, context):
+async def open_habit_delete_list(
+    update,
+    context
+):
+
+    query = update.callback_query
+
+    if not query:
+        return
+
+    await query.answer()
+
+    user_id = update.effective_user.id
+
+    habits = get_user_habits(
+        user_id
+    )
+
+    keyboard = []
+
+    for habit in habits:
+
+        icon = (
+            "🟢"
+            if habit["habit_type"] == "good"
+            else
+            "🔴"
+        )
+
+        keyboard.append(
+            [
+                InlineKeyboardButton(
+                    f"{icon} {habit['name']}",
+                    callback_data=f"habit_delete_{habit['id']}"
+                )
+            ]
+        )
+
+    keyboard.append(
+        [
+            InlineKeyboardButton(
+                "⬅️ Назад",
+                callback_data="habit_edit"
+            )
+        ]
+    )
+
+    await query.edit_message_text(
+        "🗑 <b>Удаление привычки</b>\n\n"
+        "Выбери привычку, которую хочешь удалить:",
+        parse_mode="HTML",
+        reply_markup=InlineKeyboardMarkup(
+            keyboard
+        )
+    )
+
+# =========================================================
+# СПИСОК ПОЛЕЗНЫХ ПРИВЫЧЕК
+# =========================================================
+
+async def open_good_habits(
+    update,
+    context
+):
 
     await show_habits(
         update,
@@ -70,7 +145,14 @@ async def open_good_habits(update, context):
     )
 
 
-async def open_bad_habits(update, context):
+# =========================================================
+# СПИСОК НЕЖЕЛАТЕЛЬНЫХ ПРИВЫЧЕК
+# =========================================================
+
+async def open_bad_habits(
+    update,
+    context
+):
 
     await show_habits(
         update,
@@ -79,6 +161,10 @@ async def open_bad_habits(update, context):
     )
 
 
+# =========================================================
+# СПИСОК ПРИВЫЧЕК
+# =========================================================
+
 async def show_habits(
     update,
     context,
@@ -86,6 +172,9 @@ async def show_habits(
 ):
 
     query = update.callback_query
+
+    if not query:
+        return
 
     await query.answer()
 
@@ -97,12 +186,19 @@ async def show_habits(
         if h["habit_type"] == habit_type
     ]
 
-    title = (
-        "🟢 <b>Полезные привычки</b>\n\n"
-        if habit_type == "good"
-        else
-        "🔴 <b>Нежелательные привычки</b>\n\n"
-    )
+    if habit_type == "good":
+
+        title = (
+            "🟢 <b>Полезные привычки</b>\n\n"
+            "Выбери привычку:"
+        )
+
+    else:
+
+        title = (
+            "🔴 <b>Нежелательные привычки</b>\n\n"
+            "Выбери привычку:"
+        )
 
     keyboard = []
 
@@ -117,7 +213,6 @@ async def show_habits(
             ]
         )
 
-
     keyboard.append(
         [
             InlineKeyboardButton(
@@ -127,19 +222,14 @@ async def show_habits(
         ]
     )
 
-
     await query.edit_message_text(
-        title +
-        (
-            "Выбери привычку:"
-            if habits
-            else
-            "Пока ничего нет."
-        ),
+        title
+        if habits
+        else
+        title + "\n\nПока здесь ничего нет.",
         parse_mode="HTML",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
-
 
 
 # =========================================================
@@ -153,38 +243,54 @@ async def open_habit(
 
     query = update.callback_query
 
+    if not query:
+        return
+
     await query.answer()
 
+    try:
 
-    habit_id = int(
-        query.data.replace(
-            "habit_edit_",
-            ""
+        habit_id = int(
+            query.data.replace(
+                "habit_edit_",
+                ""
+            )
         )
-    )
 
+    except ValueError:
+
+        return
 
     user_id = update.effective_user.id
 
+    habits = get_user_habits(
+        user_id
+    )
 
     habit = next(
         (
-            h
-            for h in get_user_habits(user_id)
-            if h["id"] == habit_id
+            item
+            for item in habits
+            if item["id"] == habit_id
         ),
         None
     )
 
-
     if not habit:
-        return
 
+        await query.message.reply_text(
+            "❌ Привычка не найдена."
+        )
+
+        return
 
     context.user_data[
         "editing_habit_id"
     ] = habit_id
 
+    context.user_data[
+        "editing_habit_type"
+    ] = habit["habit_type"]
 
     icon = (
         "🟢"
@@ -193,34 +299,47 @@ async def open_habit(
         "🔴"
     )
 
+    frequency_text = format_frequency(
+        habit.get("frequency"),
+        habit.get("schedule_days")
+    )
 
     keyboard = [
+
         [
             InlineKeyboardButton(
                 "✏️ Название",
                 callback_data=f"habit_name_{habit_id}"
             )
         ],
+
         [
             InlineKeyboardButton(
                 "📅 Периодичность",
                 callback_data=f"habit_frequency_{habit_id}"
             )
         ],
+
+        [
+            InlineKeyboardButton(
+                "🗑 Удалить привычку",
+                callback_data=f"habit_delete_{habit_id}"
+            )
+        ],
+
         [
             InlineKeyboardButton(
                 "⬅️ Назад",
-                callback_data="habit_edit"
+                callback_data=(
+                    "habit_edit_good"
+                    if habit["habit_type"] == "good"
+                    else
+                    "habit_edit_bad"
+                )
             )
         ],
+
     ]
-
-
-    frequency_text = format_frequency(
-        habit.get("frequency"),
-        habit.get("schedule_days")
-    )
-
 
     text = (
         f"{icon} <b>{habit['name']}</b>\n\n"
@@ -228,13 +347,197 @@ async def open_habit(
         "Что хочешь изменить?"
     )
 
-
     await query.edit_message_text(
         text,
         parse_mode="HTML",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
+
+# =========================================================
+# ПОДТВЕРЖДЕНИЕ УДАЛЕНИЯ
+# =========================================================
+
+async def open_habit_delete(
+    update,
+    context
+):
+
+    query = update.callback_query
+
+    if not query:
+        return
+
+    await query.answer()
+
+    try:
+
+        habit_id = int(
+            query.data.replace(
+                "habit_delete_",
+                ""
+            )
+        )
+
+    except ValueError:
+
+        return
+
+    user_id = update.effective_user.id
+
+    habits = get_user_habits(
+        user_id
+    )
+
+    habit = next(
+        (
+            item
+            for item in habits
+            if item["id"] == habit_id
+        ),
+        None
+    )
+
+    if not habit:
+
+        await query.message.reply_text(
+            "❌ Привычка уже не найдена."
+        )
+
+        return
+
+    context.user_data[
+        "deleting_habit_id"
+    ] = habit_id
+
+    icon = (
+        "🟢"
+        if habit["habit_type"] == "good"
+        else
+        "🔴"
+    )
+
+    keyboard = [
+
+        [
+            InlineKeyboardButton(
+                "🗑 Да, удалить",
+                callback_data=f"habit_delete_confirm_{habit_id}"
+            )
+        ],
+
+        [
+            InlineKeyboardButton(
+                "↩️ Отмена",
+                callback_data=f"habit_edit_{habit_id}"
+            )
+        ],
+
+    ]
+
+    await query.edit_message_text(
+        f"{icon} <b>{habit['name']}</b>\n\n"
+        "Удалить эту привычку?\n\n"
+        "Она перестанет отображаться в твоём дне "
+        "и больше не будет учитываться как активная.",
+        parse_mode="HTML",
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+
+
+# =========================================================
+# ПОДТВЕРЖДЁННОЕ УДАЛЕНИЕ
+# =========================================================
+
+async def confirm_habit_delete(
+    update,
+    context
+):
+
+    query = update.callback_query
+
+    if not query:
+        return
+
+    await query.answer()
+
+    try:
+
+        habit_id = int(
+            query.data.replace(
+                "habit_delete_confirm_",
+                ""
+            )
+        )
+
+    except ValueError:
+
+        return
+
+    user_id = update.effective_user.id
+
+    habits = get_user_habits(
+        user_id
+    )
+
+    habit = next(
+        (
+            item
+            for item in habits
+            if item["id"] == habit_id
+        ),
+        None
+    )
+
+    if not habit:
+
+        await query.edit_message_text(
+            "❌ Привычка уже удалена."
+        )
+
+        return
+
+    habit_name = habit["name"]
+
+    habit_type = habit["habit_type"]
+
+    mark_habit_removed(
+        user_id,
+        habit_id
+    )
+
+    context.user_data.pop(
+        "editing_habit_id",
+        None
+    )
+
+    context.user_data.pop(
+        "deleting_habit_id",
+        None
+    )
+
+    await query.edit_message_text(
+        f"🗑 <b>Привычка удалена</b>\n\n"
+        f"«{habit_name}» больше не будет отображаться "
+        f"в твоём дне.",
+        parse_mode="HTML",
+        reply_markup=InlineKeyboardMarkup(
+            [
+                [
+                    InlineKeyboardButton(
+                        "↩️ К привычкам",
+                        callback_data="habit_edit"
+                    )
+                ],
+                [
+                    InlineKeyboardButton(
+                        "🎯 Моя цель",
+                        callback_data="goal_back"
+                    )
+                ],
+            ]
+        )
+    )
 
 
 # =========================================================
@@ -248,43 +551,59 @@ async def edit_habit_frequency(
 
     query = update.callback_query
 
+    if not query:
+        return
+
     await query.answer()
 
+    try:
 
-    habit_id = int(
-        query.data.replace(
-            "habit_frequency_",
-            ""
+        habit_id = int(
+            query.data.replace(
+                "habit_frequency_",
+                ""
+            )
         )
-    )
 
+    except ValueError:
+
+        return
 
     context.user_data[
         "editing_habit_id"
     ] = habit_id
 
-
     keyboard = [
+
         [
             InlineKeyboardButton(
                 "📅 Каждый день",
                 callback_data="edit_frequency_daily"
             )
         ],
+
         [
             InlineKeyboardButton(
                 "🗓️ Пн–Пт",
                 callback_data="edit_frequency_weekdays"
             )
         ],
+
         [
             InlineKeyboardButton(
                 "✏️ Свои дни",
                 callback_data="edit_frequency_custom"
             )
         ],
-    ]
 
+        [
+            InlineKeyboardButton(
+                "⬅️ Назад",
+                callback_data=f"habit_edit_{habit_id}"
+            )
+        ],
+
+    ]
 
     await query.edit_message_text(
         "📅 <b>Периодичность</b>\n\n"
@@ -294,207 +613,11 @@ async def edit_habit_frequency(
     )
 
 
+# =========================================================
+# СОХРАНЕНИЕ ПЕРИОДИЧНОСТИ
+# =========================================================
 
 async def habit_frequency_callback(
-    update,
-    context
-):
-
-    query = update.callback_query
-
-    await query.answer()
-
-    data = query.data
-
-
-    habit_id = context.user_data.get(
-        "editing_habit_id"
-    )
-
-
-    if data == "edit_frequency_daily":
-
-       await update_frequency(
-            update,
-            context,
-            habit_id,
-            "daily",
-            None
-        )
-
-
-    elif data == "edit_frequency_weekdays":
-
-        await update_frequency(
-            update,
-            context,
-            habit_id,
-            "weekdays",
-            None
-        )
-
-
-    elif data == "edit_frequency_custom":
-
-        
-        context.user_data[
-            "habit_edit_state"
-        ] = "frequency_custom"
-
-        print(
-            "🔥 WAITING CUSTOM DAYS STATE:",
-            context.user_data
-        )
-
-        await query.message.reply_text(
-            "✏️ Напиши дни через запятую:\n\n"
-            "Например:\n"
-            "Пн, Ср, Пт"
-        )
-
-
-
-# =========================================================
-# СОХРАНЕНИЕ СВОИХ ДНЕЙ
-# =========================================================
-
-async def save_custom_habit_frequency(
-    update,
-    context
-):
-
-    if context.user_data.get(
-        "habit_edit_state"
-    ) != "frequency_custom":
-
-        return False
-
-
-    days = parse_custom_days(
-        update.message.text
-    )
-
-
-    if not days:
-
-        await update.message.reply_text(
-            "❌ Не смог распознать дни."
-        )
-
-        return True
-
-
-
-    schedule_days = ",".join(
-        map(str, days)
-    )
-
-
-    habit_id = context.user_data.get(
-        "editing_habit_id"
-    )
-
-
-    conn = get_connection()
-    cursor = conn.cursor()
-
-
-    cursor.execute(
-        """
-        UPDATE habits
-        SET
-            frequency = ?,
-            schedule_days = ?
-        WHERE id = ?
-        AND user_id = ?
-        """,
-        (
-            "custom",
-            schedule_days,
-            habit_id,
-            update.effective_user.id
-        )
-    )
-
-
-    conn.commit()
-    conn.close()
-
-
-    context.user_data.pop(
-        "habit_edit_state",
-        None
-    )
-
-
-    await update.message.reply_text(
-        "✅ Периодичность обновлена."
-    )
-
-    from handlers.goal.screen import show_goal
-
-    await show_goal(
-        update,
-        context
-    )
-
-    return True
-
-
-
-# =========================================================
-# ОБНОВЛЕНИЕ
-# =========================================================
-async def update_frequency(
-    update,
-    context,
-    habit_id,
-    frequency,
-    schedule_days
-):
-
-    conn = get_connection()
-    cursor = conn.cursor()
-
-    cursor.execute(
-        """
-        UPDATE habits
-        SET
-            frequency = ?,
-            schedule_days = ?
-        WHERE id = ?
-        AND user_id = ?
-        """,
-        (
-            frequency,
-            schedule_days,
-            habit_id,
-            update.effective_user.id
-        )
-    )
-
-    conn.commit()
-    conn.close()
-
-
-    await update.effective_message.reply_text(
-        "✅ Периодичность обновлена."
-    )
-
-
-    from handlers.goal.screen import show_goal
-
-    await show_goal(
-        update,
-        context,
-        force_new=True
-    )
-
-# =========================================================
-# ИЗМЕНЕНИЕ НАЗВАНИЯ ПРИВЫЧКИ
-# =========================================================
-
-async def edit_habit_name(
     update,
     context
 ):
@@ -506,70 +629,214 @@ async def edit_habit_name(
 
     await query.answer()
 
-
-    habit_id = int(
-        query.data.replace(
-            "habit_name_",
-            ""
-        )
-    )
-
-
-    context.user_data[
-        "editing_habit_id"
-    ] = habit_id
-
-
-    context.user_data[
-        "habit_edit_state"
-    ] = "name"
-
-
-    await query.message.reply_text(
-        "✏️ <b>Новое название привычки</b>\n\n"
-        "Напиши новое название:",
-        parse_mode="HTML"
-    )
-
-# =========================================================
-# СОХРАНЕНИЕ НАЗВАНИЯ ПРИВЫЧКИ
-# =========================================================
-
-async def save_habit_name(
-    update,
-    context
-):
-
-    if not update.message:
-        return False
-
-
-    if context.user_data.get(
-        "habit_edit_state"
-    ) != "name":
-
-        return False
-
-
-    name = update.message.text.strip()
-
-
-    if not name:
-        return True
-
+    data = query.data
 
     habit_id = context.user_data.get(
         "editing_habit_id"
     )
 
-
     if not habit_id:
-        return False
+        return
 
+    if data == "edit_frequency_daily":
+
+        await update_frequency(
+            update,
+            context,
+            habit_id,
+            "daily",
+            None
+        )
+
+    elif data == "edit_frequency_weekdays":
+
+        await update_frequency(
+            update,
+            context,
+            habit_id,
+            "weekdays",
+            None
+        )
+
+    elif data == "edit_frequency_custom":
+
+        context.user_data[
+            "habit_edit_state"
+        ] = "frequency_custom"
+
+        await query.message.reply_text(
+            "✏️ <b>Свои дни</b>\n\n"
+            "Напиши дни через запятую.\n\n"
+            "Например:\n"
+            "Пн, Ср, Пт",
+            parse_mode="HTML"
+        )
+
+
+# =========================================================
+# ОБНОВЛЕНИЕ ПЕРИОДИЧНОСТИ
+# =========================================================
+
+async def update_frequency(
+    update,
+    context,
+    habit_id,
+    frequency,
+    schedule_days
+):
+
+    user_id = update.effective_user.id
+
+    if frequency == "custom":
+
+        parsed = parse_custom_days(
+            schedule_days
+        )
+
+        if not parsed:
+
+            await update.effective_message.reply_text(
+                "❌ Не удалось распознать дни.\n\n"
+                "Напиши, например:\n"
+                "Пн, Ср, Пт"
+            )
+
+            return
+
+        schedule_days = ",".join(
+            map(str, parsed)
+        )
 
     conn = get_connection()
     cursor = conn.cursor()
 
+    cursor.execute(
+        """
+        UPDATE habits
+
+        SET
+            frequency = ?,
+            schedule_days = ?
+
+        WHERE id = ?
+        AND user_id = ?
+        AND active = 1
+        """,
+        (
+            frequency,
+            schedule_days,
+            habit_id,
+            user_id
+        )
+    )
+
+    conn.commit()
+    conn.close()
+
+    context.user_data.pop(
+        "habit_edit_state",
+        None
+    )
+
+    await update.effective_message.reply_text(
+        "✅ <b>Периодичность обновлена.</b>\n\n"
+        "Привычка сохранена.",
+        parse_mode="HTML",
+        reply_markup=InlineKeyboardMarkup(
+            [
+                [
+                    InlineKeyboardButton(
+                        "↩️ К привычке",
+                        callback_data=f"habit_edit_{habit_id}"
+                    )
+                ],
+                [
+                    InlineKeyboardButton(
+                        "🎯 Моя цель",
+                        callback_data="goal_back"
+                    )
+                ],
+            ]
+        )
+    )
+
+
+# =========================================================
+# ИЗМЕНЕНИЕ НАЗВАНИЯ
+# =========================================================
+
+async def edit_habit_name(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE
+):
+
+    query = update.callback_query
+
+    if not query:
+        return
+
+    await query.answer()
+
+    try:
+
+        habit_id = int(
+            query.data.replace(
+                "habit_name_",
+                ""
+            )
+        )
+
+    except ValueError:
+
+        return
+
+    context.user_data[
+        "editing_habit_id"
+    ] = habit_id
+
+    context.user_data[
+        "habit_edit_state"
+    ] = "name"
+
+    await query.message.reply_text(
+        "✏️ <b>Новое название</b>\n\n"
+        "Напиши новое название привычки.",
+        parse_mode="HTML"
+    )
+
+
+# =========================================================
+# СОХРАНЕНИЕ НОВОГО НАЗВАНИЯ ПРИВЫЧКИ
+# =========================================================
+
+async def save_habit_name(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE
+):
+
+    if not update.message:
+        return False
+
+    habit_id = context.user_data.get(
+        "editing_habit_id"
+    )
+
+    if not habit_id:
+        return False
+
+    new_name = update.message.text.strip()
+
+    if not new_name:
+        await update.message.reply_text(
+            "❌ Название не может быть пустым.\n\n"
+            "Напиши новое название привычки."
+        )
+        return True
+
+    user_id = update.effective_user.id
+
+    conn = get_connection()
+    cursor = conn.cursor()
 
     cursor.execute(
         """
@@ -578,39 +845,147 @@ async def save_habit_name(
         SET name = ?
 
         WHERE id = ?
-
         AND user_id = ?
-
+        AND active = 1
         """,
         (
-            name,
+            new_name,
             habit_id,
-            update.effective_user.id,
+            user_id
         )
     )
 
-
     conn.commit()
     conn.close()
-
 
     context.user_data.pop(
         "habit_edit_state",
         None
     )
 
+    await update.message.reply_text(
+        f"✏️ <b>Привычка обновлена</b>\n\n"
+        f"Теперь она называется:\n"
+        f"<b>«{new_name}»</b>",
+        parse_mode="HTML",
+        reply_markup=InlineKeyboardMarkup(
+            [
+                [
+                    InlineKeyboardButton(
+                        "↩️ К привычке",
+                        callback_data=f"habit_edit_{habit_id}"
+                    )
+                ],
+                [
+                    InlineKeyboardButton(
+                        "🎯 Моя цель",
+                        callback_data="goal_back"
+                    )
+                ],
+            ]
+        )
+    )
+
+    return True
+
+
+# =========================================================
+# СОХРАНЕНИЕ СВОИХ ДНЕЙ ПРИВЫЧКИ
+# =========================================================
+
+async def save_custom_habit_frequency(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE
+):
+
+    if not update.message:
+        return False
+
+    habit_id = context.user_data.get(
+        "editing_habit_id"
+    )
+
+    if not habit_id:
+        return False
+
+    text = update.message.text.strip()
+
+    parsed = parse_custom_days(
+        text
+    )
+
+    if not parsed:
+
+        await update.message.reply_text(
+            "❌ Не удалось распознать дни.\n\n"
+            "Напиши их через запятую.\n\n"
+            "Например:\n"
+            "Пн, Ср, Пт"
+        )
+
+        return True
+
+    schedule_days = ",".join(
+        map(str, parsed)
+    )
+
+    user_id = update.effective_user.id
+
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    cursor.execute(
+        """
+        UPDATE habits
+
+        SET
+            frequency = 'custom',
+            schedule_days = ?
+
+        WHERE id = ?
+        AND user_id = ?
+        AND active = 1
+        """,
+        (
+            schedule_days,
+            habit_id,
+            user_id
+        )
+    )
+
+    conn.commit()
+    conn.close()
+
+    context.user_data.pop(
+        "habit_edit_state",
+        None
+    )
+
+    days_text = format_custom_days(
+        schedule_days
+    )
 
     await update.message.reply_text(
-        "✅ Название привычки обновлено."
+        f"📅 <b>Периодичность обновлена</b>\n\n"
+        f"Привычка теперь выполняется:\n"
+        f"<b>{days_text}</b>",
+        parse_mode="HTML",
+        reply_markup=InlineKeyboardMarkup(
+            [
+                [
+                    InlineKeyboardButton(
+                        "↩️ К привычке",
+                        callback_data=f"habit_edit_{habit_id}"
+                    )
+                ],
+                [
+                    InlineKeyboardButton(
+                        "🎯 Моя цель",
+                        callback_data="goal_back"
+                    )
+                ],
+            ]
+        )
     )
-
-
-    from handlers.goal.screen import show_goal
-
-    await show_goal(
-        update,
-        context
-    )
-
 
     return True

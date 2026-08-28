@@ -26,6 +26,17 @@ from handlers.goal.habits import (
     edit_habit_frequency,
     habit_frequency_callback,
     edit_habit_name,
+    open_habit_delete,
+    open_habit_delete_list,
+    confirm_habit_delete,
+)
+
+from handlers.goal.add_habit import (
+    open_add_habit,
+    add_good_habit,
+    add_bad_habit,
+    add_habit_frequency_callback,
+    add_habit_difficulty_callback,
 )
 
 
@@ -62,7 +73,6 @@ async def goal_callback_router(
         context.user_data[
             "goal_review_state"
         ] = "waiting_result"
-
 
         await query.message.reply_text(
             "🏆 Отлично.\n\n"
@@ -101,11 +111,9 @@ async def goal_callback_router(
             None
         )
 
-
         await query.message.reply_text(
             "👍 Хорошо. Цель остаётся в работе."
         )
-
 
         from handlers.menu import show_menu
 
@@ -144,13 +152,11 @@ async def goal_callback_router(
                 )
             )
 
-
         await query.message.reply_text(
             "💪 Хорошо.\n\n"
             "Продолжаем путь. "
             "Я спрошу тебя снова позже."
         )
-
 
         from handlers.menu import show_menu
 
@@ -248,12 +254,58 @@ async def goal_callback_router(
 
 
     # =====================================================
-    # ИЗМЕНИТЬ ТЕКУЩУЮ ПРИВЫЧКУ
+    # ОТКРЫТЬ УПРАВЛЕНИЕ ПРИВЫЧКАМИ
     # =====================================================
 
     if data == "habit_edit":
 
         await open_habit_edit(
+            update,
+            context
+        )
+
+        return
+
+
+    # =====================================================
+    # УДАЛЕНИЕ ПРИВЫЧКИ — СПИСОК
+    # =====================================================
+
+    if data == "habit_delete":
+
+        await open_habit_delete_list(
+            update,
+            context
+        )
+
+        return
+
+
+    # =====================================================
+    # УДАЛЕНИЕ ПРИВЫЧКИ — ПОДТВЕРЖДЕНИЕ
+    # =====================================================
+
+    if data.startswith(
+        "habit_delete_confirm_"
+    ):
+
+        await confirm_habit_delete(
+            update,
+            context
+        )
+
+        return
+
+
+    # =====================================================
+    # УДАЛЕНИЕ ПРИВЫЧКИ — ВЫБОР ПРИВЫЧКИ
+    # =====================================================
+
+    if data.startswith(
+        "habit_delete_"
+    ):
+
+        await open_habit_delete(
             update,
             context
         )
@@ -290,51 +342,84 @@ async def goal_callback_router(
 
 
     # =====================================================
-    # PRO — ДОБАВИТЬ ПРИВЫЧКУ
+    # ДОБАВЛЕНИЕ НОВОЙ ПРИВЫЧКИ
     # =====================================================
 
     if data == "habit_add_pro":
 
-        await query.answer()
-
-        await query.message.reply_text(
-            "⭐ <b>Эта возможность доступна в PRO</b>\n\n"
-            "С PRO ты сможешь добавлять дополнительные "
-            "полезные и нежелательные привычки.\n\n"
-            "🚀 Скоро.",
-            parse_mode="HTML",
-            reply_markup=InlineKeyboardMarkup(
-                [
-                    [
-                        InlineKeyboardButton(
-                            "⬅️ Назад",
-                            callback_data="goal_habits"
-                        )
-                    ]
-                ]
-            )
-        )
-
-        return
-
-    # =====================================================
-    # ВЫБОР КОНКРЕТНОЙ ПРИВЫЧКИ
-    # =====================================================
-
-    if data.startswith("habit_edit_"):
-
-        await open_habit(
+        await open_add_habit(
             update,
             context
         )
 
         return
-        
+
+
     # =====================================================
-    # ИЗМЕНЕНИЕ НАЗВАНИЯ
+    # ВЫБОР ТИПА НОВОЙ ПРИВЫЧКИ
     # =====================================================
 
-    if data.startswith("habit_name_"):
+    if data == "add_habit_good":
+
+        await add_good_habit(
+            update,
+            context
+        )
+
+        return
+
+
+    if data == "add_habit_bad":
+
+        await add_bad_habit(
+            update,
+            context
+        )
+
+        return
+
+
+    # =====================================================
+    # ПЕРИОДИЧНОСТЬ НОВОЙ ПРИВЫЧКИ
+    # =====================================================
+
+    if data in {
+        "add_habit_frequency_daily",
+        "add_habit_frequency_weekdays",
+        "add_habit_frequency_custom",
+    }:
+
+        await add_habit_frequency_callback(
+            update,
+            context
+        )
+
+        return
+
+
+    # =====================================================
+    # СЛОЖНОСТЬ НОВОЙ ПРИВЫЧКИ
+    # =====================================================
+
+    if data.startswith(
+        "add_habit_difficulty_"
+    ):
+
+        await add_habit_difficulty_callback(
+            update,
+            context
+        )
+
+        return
+
+
+    # =====================================================
+    # ИЗМЕНЕНИЕ НАЗВАНИЯ ПРИВЫЧКИ
+    # =====================================================
+
+    if data.startswith(
+        "habit_name_"
+    ):
 
         await edit_habit_name(
             update,
@@ -345,10 +430,12 @@ async def goal_callback_router(
 
 
     # =====================================================
-    # ИЗМЕНЕНИЕ ПЕРИОДИЧНОСТИ
+    # ИЗМЕНЕНИЕ ПЕРИОДИЧНОСТИ ПРИВЫЧКИ
     # =====================================================
 
-    if data.startswith("habit_frequency_"):
+    if data.startswith(
+        "habit_frequency_"
+    ):
 
         await edit_habit_frequency(
             update,
@@ -359,7 +446,7 @@ async def goal_callback_router(
 
 
     # =====================================================
-    # ВЫБОР ПЕРИОДИЧНОСТИ
+    # ВЫБОР НОВОЙ ПЕРИОДИЧНОСТИ ПРИ РЕДАКТИРОВАНИИ
     # =====================================================
 
     if data in {
@@ -374,3 +461,20 @@ async def goal_callback_router(
         )
 
         return
+
+
+    # =====================================================
+    # ВЫБОР КОНКРЕТНОЙ ПРИВЫЧКИ
+    # =====================================================
+
+    if data.startswith(
+        "habit_edit_"
+    ):
+
+        await open_habit(
+            update,
+            context
+        )
+
+        return
+

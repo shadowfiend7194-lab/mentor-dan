@@ -10,7 +10,6 @@ def migrate():
     conn = get_connection()
     cursor = conn.cursor()
 
-
     # =====================================================
     # HABITS
     # =====================================================
@@ -27,7 +26,6 @@ def migrate():
     ]
 
     habit_fields = {
-
 
         "schedule_days":
         "TEXT",
@@ -46,6 +44,22 @@ def migrate():
 
         "controlled_at":
         "TEXT",
+
+        # -------------------------------------------------
+        # PRO
+        # -------------------------------------------------
+
+        "difficulty":
+        "INTEGER",
+
+        "motivation":
+        "TEXT",
+
+        "goal_id":
+        "INTEGER",
+
+        "pro_status":
+        "TEXT DEFAULT 'active'",
     }
 
     for field, field_type in habit_fields.items():
@@ -62,7 +76,6 @@ def migrate():
             print(
                 f"✅ Added {field} to habits"
             )
-
 
     # =====================================================
     # HABIT LOGS
@@ -88,7 +101,6 @@ def migrate():
         )
         """
     )
-
 
     # =====================================================
     # GOALS
@@ -118,8 +130,20 @@ def migrate():
 
         "last_review_date":
         "TEXT",
-    }
 
+        # -------------------------------------------------
+        # PRO
+        # -------------------------------------------------
+
+        "difficulty":
+        "INTEGER",
+
+        "motivation":
+        "TEXT",
+
+        "pro_status":
+        "TEXT DEFAULT 'active'",
+    }
 
     for field, field_type in goal_fields.items():
 
@@ -135,7 +159,6 @@ def migrate():
             print(
                 f"✅ Added {field} to goals"
             )
-
 
     # =====================================================
     # USERS
@@ -168,7 +191,6 @@ def migrate():
         "INTEGER DEFAULT 1",
     }
 
-
     cursor.execute(
         """
         PRAGMA table_info(users)
@@ -179,7 +201,6 @@ def migrate():
         row[1]
         for row in cursor.fetchall()
     ]
-
 
     for field, field_type in user_fields.items():
 
@@ -195,7 +216,6 @@ def migrate():
             print(
                 f"✅ Added {field}"
             )
-
 
     # =====================================================
     # ИСТОРИЯ ПУТИ
@@ -226,9 +246,8 @@ def migrate():
         """
     )
 
-
     # =====================================================
-    # DENA — ИСТОРИЯ ПЕРЕПИСКИ
+    # ДЭН — ИСТОРИЯ ПЕРЕПИСКИ
     # =====================================================
 
     cursor.execute(
@@ -249,9 +268,8 @@ def migrate():
         """
     )
 
-
     # =====================================================
-    # DENA — ДОЛГОСРОЧНАЯ ПАМЯТЬ
+    # ДЭН — ДОЛГОСРОЧНАЯ ПАМЯТЬ
     # =====================================================
 
     cursor.execute(
@@ -276,9 +294,8 @@ def migrate():
         """
     )
 
-
     # =====================================================
-    # ИНДЕКСЫ DENA
+    # ИНДЕКСЫ ДЭНА
     # =====================================================
 
     cursor.execute(
@@ -289,7 +306,6 @@ def migrate():
         """
     )
 
-
     cursor.execute(
         """
         CREATE INDEX IF NOT EXISTS
@@ -297,7 +313,6 @@ def migrate():
         ON dan_messages(user_id, created_at)
         """
     )
-
 
     cursor.execute(
         """
@@ -307,10 +322,76 @@ def migrate():
         """
     )
 
+    # =====================================================
+    # SUBSCRIPTIONS — PRO
+    # =====================================================
+
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS subscriptions (
+
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+            user_id INTEGER NOT NULL UNIQUE,
+
+            plan TEXT NOT NULL DEFAULT 'pro',
+
+            status TEXT NOT NULL DEFAULT 'active',
+
+            started_at TEXT,
+
+            expires_at TEXT,
+
+            created_at TEXT NOT NULL,
+
+            updated_at TEXT NOT NULL
+
+        )
+        """
+    )
+
+    # =====================================================
+    # ИНДЕКСЫ PRO
+    # =====================================================
+
+    cursor.execute(
+        """
+        CREATE INDEX IF NOT EXISTS
+        idx_subscriptions_user
+        ON subscriptions(user_id)
+        """
+    )
+
+    cursor.execute(
+        """
+        CREATE INDEX IF NOT EXISTS
+        idx_habits_goal
+        ON habits(goal_id)
+        """
+    )
+
+    cursor.execute(
+        """
+        CREATE INDEX IF NOT EXISTS
+        idx_habits_pro_status
+        ON habits(pro_status)
+        """
+    )
+
+    cursor.execute(
+        """
+        CREATE INDEX IF NOT EXISTS
+        idx_goals_pro_status
+        ON goals(pro_status)
+        """
+    )
+
+    # =====================================================
+    # СОХРАНЕНИЕ
+    # =====================================================
 
     conn.commit()
     conn.close()
-
 
     print(
         "✅ Migration complete"

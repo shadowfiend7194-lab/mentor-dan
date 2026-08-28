@@ -1,5 +1,4 @@
 import logging
-import os
 
 from telegram import Update
 
@@ -51,11 +50,18 @@ from handlers.dan.router import (
     open_dan,
 )
 
-
 from handlers.menu import (
     menu_text,
     show_menu,
     show_settings,
+)
+
+from handlers.pro import (
+    show_pro,
+    show_pro_features,
+    subscribe_pro,
+    test_activate_pro,
+    back_to_pro,
 )
 
 from scheduler.notifications import check_notifications
@@ -78,15 +84,84 @@ from handlers.feedback import (
     handle_feedback_message,
 )
 
+from handlers.goal.add_habit import (
+    save_new_habit_name,
+    save_custom_habit_days,
+    save_habit_motivation,
+)
+
+from database.connection import get_connection
+
 # =========================================================
 # ЛОГИРОВАНИЕ
 # =========================================================
 
-
-
 logger = logging.getLogger(__name__)
 
 
+# =========================================================
+# ТЕКСТОВОЙ РОУТЕР СОЗДАНИЯ ПРИВЫЧКИ
+# =========================================================
+
+async def habit_creation_text_router(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE
+):
+
+    state = context.user_data.get(
+        "add_habit_state"
+    )
+
+    # -----------------------------------------------------
+    # НАЗВАНИЕ ПРИВЫЧКИ
+    # -----------------------------------------------------
+
+    if state == "name":
+
+        await save_new_habit_name(
+            update,
+            context
+        )
+
+        return
+
+
+    # -----------------------------------------------------
+    # СВОИ ДНИ
+    # -----------------------------------------------------
+
+    if state == "frequency_custom":
+
+        await save_custom_habit_days(
+            update,
+            context
+        )
+
+        return
+
+
+    # -----------------------------------------------------
+    # МОТИВАЦИЯ
+    # -----------------------------------------------------
+
+    if state == "motivation":
+
+        await save_habit_motivation(
+            update,
+            context
+        )
+
+        return
+
+
+    # -----------------------------------------------------
+    # ЕСЛИ ПОЛЬЗОВАТЕЛЬ НЕ СОЗДАЁТ ПРИВЫЧКУ
+    # -----------------------------------------------------
+
+    await text_router(
+        update,
+        context
+    )
 
 
 # =========================================================
@@ -101,6 +176,7 @@ def main():
 
     init_db()
     migrate()
+
 
     # -----------------------------------------------------
     # TELEGRAM APPLICATION
@@ -130,6 +206,7 @@ def main():
         .build()
     )
 
+
     # -----------------------------------------------------
     # ОБРАБОТКА ОШИБОК
     # -----------------------------------------------------
@@ -137,6 +214,7 @@ def main():
     app.add_error_handler(
         error_handler
     )
+
 
     # =====================================================
     # УВЕДОМЛЕНИЯ ДЭНА
@@ -148,9 +226,10 @@ def main():
         first=10
     )
 
-    # =========================================================
-    # /RESET_TEST — СБРОС ОНБОРДИНГА ДЛЯ ТЕСТИРОВАНИЯ
-    # =========================================================
+
+    # =====================================================
+    # /RESET_TEST
+    # =====================================================
 
     async def reset_test(
         update: Update,
@@ -171,6 +250,90 @@ def main():
             "и память Дэна не удаляются."
         )
 
+        # =====================================================
+    # /DEBUG_HABITS
+    # =====================================================
+
+    async def debug_habits(
+        update: Update,
+        context: ContextTypes.DEFAULT_TYPE
+    ):
+
+        user_id = update.effective_user.id
+
+        conn = get_connection()
+        cursor = conn.cursor()
+
+        cursor.execute(
+            """
+            SELECT
+                id,
+                name,
+                habit_type,
+                frequency,
+                schedule_days,
+                active
+            FROM habits
+            WHERE user_id = ?
+            ORDER BY id
+            """,
+            (user_id,)
+        )
+
+        habits = cursor.fetchall()
+
+        conn.close()
+
+        if not habits:
+
+            await update.message.reply_text(
+                "🔎 <b>Привычки не найдены.</b>\n\n"
+                "В таблице habits для этого пользователя "
+                "нет записей.",
+                parse_mode="HTML"
+            )
+
+            return
+
+        lines = [
+            "🔎 <b>DEBUG — привычки в базе</b>\n"
+        ]
+
+        for habit in habits:
+
+            habit_id = habit[0]
+            name = habit[1]
+            habit_type = habit[2]
+            frequency = habit[3]
+            schedule_days = habit[4]
+            active = habit[5]
+
+            icon = (
+                "🟢"
+                if habit_type == "good"
+                else "🔴"
+            )
+
+            active_text = (
+                "АКТИВНА"
+                if active
+                else "УДАЛЕНА"
+            )
+
+            lines.append(
+                f"{icon} <b>ID {habit_id}</b>\n"
+                f"Название: {name}\n"
+                f"Тип: {habit_type}\n"
+                f"Периодичность: {frequency}\n"
+                f"Дни: {schedule_days or '—'}\n"
+                f"Статус: <b>{active_text}</b>\n"
+            )
+
+        await update.message.reply_text(
+            "\n".join(lines),
+            parse_mode="HTML"
+        )
+
     # =====================================================
     # /START
     # =====================================================
@@ -181,7 +344,7 @@ def main():
             start
         )
     )
-    
+
 
     # =====================================================
     # /RESET_TEST
@@ -191,6 +354,17 @@ def main():
         CommandHandler(
             "reset_test",
             reset_test
+        )
+    )
+
+    # =====================================================
+    # /DEBUG_HABITS
+    # =====================================================
+
+    app.add_handler(
+        CommandHandler(
+            "debug_habits",
+            debug_habits
         )
     )
 
@@ -209,6 +383,7 @@ def main():
         )
     )
 
+
     # =====================================================
     # GOAL CALLBACKS
     # =====================================================
@@ -216,24 +391,51 @@ def main():
     app.add_handler(
         CallbackQueryHandler(
             goal_callback_router,
-            pattern=r"goal_review_achieved|goal_review_continue|goal_review_back"
+            pattern=(
+                r"^(goal_review_achieved|"
+                r"goal_review_continue|"
+                r"goal_review_back)$"
+            )
         )
     )
+
+
+    # =====================================================
+    # GOAL / HABITS CALLBACKS
+    # =====================================================
 
     app.add_handler(
         CallbackQueryHandler(
             goal_callback_router,
             pattern=(
-                r"^(goal_back|goal_edit|goal_edit_current|goal_add_pro|"
-                r"goal_habits|habit_edit|habit_edit_good|habit_edit_bad|"
-                r"habit_add_pro|habit_edit_\d+|habit_name_\d+|"
+                r"^(goal_back|"
+                r"goal_edit|"
+                r"goal_edit_current|"
+                r"goal_add_pro|"
+                r"goal_habits|"
+                r"habit_edit|"
+                r"habit_edit_good|"
+                r"habit_edit_bad|"
+                r"habit_delete|"
+                r"habit_delete_\d+|"
+                r"habit_delete_confirm_\d+|"
+                r"habit_add_pro|"
+                r"add_habit_good|"
+                r"add_habit_bad|"
+                r"add_habit_frequency_daily|"
+                r"add_habit_frequency_weekdays|"
+                r"add_habit_frequency_custom|"
+                r"add_habit_difficulty_[1-5]|"
+                r"habit_edit_\d+|"
+                r"habit_name_\d+|"
                 r"habit_frequency_\d+|"
-                r"edit_frequency_daily|edit_frequency_weekdays|"
-                r"edit_frequency_custom|"
-                r"goal_review_achieved|goal_review_continue)$"
+                r"edit_frequency_daily|"
+                r"edit_frequency_weekdays|"
+                r"edit_frequency_custom)$"
             )
         )
     )
+
 
     # =====================================================
     # HABIT REVIEWS
@@ -249,6 +451,7 @@ def main():
         )
     )
 
+
     # =====================================================
     # PROGRESS
     # =====================================================
@@ -257,12 +460,16 @@ def main():
         CallbackQueryHandler(
             progress_callback_router,
             pattern=(
-                r"^(open_progress|progress_achievements|"
-                r"progress_history|progress_weekly|"
-                r"back_to_progress|go_menu)$"
+                r"^(open_progress|"
+                r"progress_achievements|"
+                r"progress_history|"
+                r"progress_weekly|"
+                r"back_to_progress|"
+                r"go_menu)$"
             )
         )
     )
+
 
     # =====================================================
     # ONBOARDING CALLBACKS
@@ -272,17 +479,27 @@ def main():
         CallbackQueryHandler(
             onboarding_callback_router,
             pattern=(
-                r"^(start_intro|why_intro|back_to_start|"
-                r"age_under_18|age_18_25|age_26_35|age_35_plus|"
-                r"good_frequency_daily|good_frequency_weekdays|"
+                r"^(start_intro|"
+                r"why_intro|"
+                r"back_to_start|"
+                r"age_under_18|"
+                r"age_18_25|"
+                r"age_26_35|"
+                r"age_35_plus|"
+                r"good_frequency_daily|"
+                r"good_frequency_weekdays|"
                 r"good_frequency_custom|"
-                r"bad_habit_yes|bad_habit_no|"
-                r"bad_frequency_daily|bad_frequency_weekdays|"
+                r"bad_habit_yes|"
+                r"bad_habit_no|"
+                r"bad_frequency_daily|"
+                r"bad_frequency_weekdays|"
                 r"bad_frequency_custom|"
-                r"oath_accept|open_main_menu)$"
+                r"oath_accept|"
+                r"open_main_menu)$"
             )
         )
     )
+
 
     # =====================================================
     # SETTINGS
@@ -295,12 +512,14 @@ def main():
         )
     )
 
+
     app.add_handler(
         CallbackQueryHandler(
             change_wake_time,
             pattern="^change_wake_time$"
         )
     )
+
 
     app.add_handler(
         CallbackQueryHandler(
@@ -309,12 +528,14 @@ def main():
         )
     )
 
+
     app.add_handler(
         CallbackQueryHandler(
             show_settings,
             pattern="^back_to_settings$"
         )
     )
+
 
     app.add_handler(
         CallbackQueryHandler(
@@ -323,6 +544,7 @@ def main():
         )
     )
 
+
     app.add_handler(
         CallbackQueryHandler(
             toggle_morning_notifications,
@@ -330,19 +552,22 @@ def main():
         )
     )
 
+
     app.add_handler(
         CallbackQueryHandler(
             toggle_evening_notifications,
             pattern="^toggle_evening_notifications$"
         )
     )
-    
+
+
     app.add_handler(
         CallbackQueryHandler(
             start_feedback,
             pattern=r"^(suggest_feature|report_problem)$"
         )
     )
+
 
     app.add_handler(
         CallbackQueryHandler(
@@ -351,12 +576,14 @@ def main():
         )
     )
 
+
     app.add_handler(
         CallbackQueryHandler(
             show_dan_memory,
             pattern="^settings_memory$"
         )
     )
+
 
     app.add_handler(
         CallbackQueryHandler(
@@ -365,6 +592,7 @@ def main():
         )
     )
 
+
     app.add_handler(
         CallbackQueryHandler(
             cancel_delete_user_data,
@@ -372,10 +600,47 @@ def main():
         )
     )
 
+
     app.add_handler(
         CallbackQueryHandler(
             confirm_delete_all_user_data,
             pattern="^confirm_delete_all$"
+        )
+    )
+
+
+    # =====================================================
+    # PRO
+    # =====================================================
+
+    app.add_handler(
+        CallbackQueryHandler(
+            show_pro,
+            pattern=r"^pro_back$"
+        )
+    )
+
+
+    app.add_handler(
+        CallbackQueryHandler(
+            show_pro_features,
+            pattern=r"^pro_features$"
+        )
+    )
+
+
+    app.add_handler(
+        CallbackQueryHandler(
+            subscribe_pro,
+            pattern=r"^pro_subscribe$"
+        )
+    )
+
+
+    app.add_handler(
+        CallbackQueryHandler(
+            test_activate_pro,
+            pattern=r"^pro_test_activate$"
         )
     )
 
@@ -391,12 +656,14 @@ def main():
         )
     )
 
+
     app.add_handler(
         CallbackQueryHandler(
             delay_evening_checkin,
             pattern="^delay_evening_checkin$"
         )
     )
+
 
     # =====================================================
     # WEEKLY REPORT TEST
@@ -409,6 +676,7 @@ def main():
         )
     )
 
+
     # =====================================================
     # DAY
     # =====================================================
@@ -419,6 +687,8 @@ def main():
             pattern="^open_day$"
         )
     )
+
+
     # =====================================================
     # ОБРАТНАЯ СВЯЗЬ
     # =====================================================
@@ -442,22 +712,29 @@ def main():
     app.add_handler(
         MessageHandler(
             filters.Regex(
-                r"^(📅 Мой день|🎯 Моя цель|📊 Мой прогресс|💬 Дэн|⚙️ Настройки|⭐ PRO)$"
+                r"^(📅 Мой день|"
+                r"🎯 Моя цель|"
+                r"📊 Мой прогресс|"
+                r"💬 Дэн|"
+                r"⚙️ Настройки|"
+                r"⭐ PRO)$"
             ),
             menu_text
         )
     )
 
+
     # =====================================================
-    # ОСТАЛЬНЫЕ ТЕКСТОВЫЕ СООБЩЕНИЯ
+    # СОЗДАНИЕ ПРИВЫЧКИ — ТЕКСТОВЫЕ ШАГИ
     # =====================================================
 
     app.add_handler(
         MessageHandler(
             filters.TEXT & ~filters.COMMAND,
-            text_router
+            habit_creation_text_router
         )
     )
+
 
     # =====================================================
     # ЗАПУСК
@@ -470,6 +747,7 @@ def main():
     print(
         "🚀 Дэн v2 запущен"
     )
+
 
     try:
 
@@ -496,3 +774,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

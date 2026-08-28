@@ -151,17 +151,17 @@ def create_habit(
     name,
     habit_type,
     frequency="daily",
-    schedule_days=None
+    schedule_days=None,
+    difficulty=None,
+    motivation=None
 ):
 
     conn = get_connection()
     cursor = conn.cursor()
 
-
     now = datetime.now().strftime(
         "%Y-%m-%d %H:%M:%S"
     )
-
 
     if frequency == "custom":
 
@@ -177,7 +177,6 @@ def create_habit(
             else None
         )
 
-
     cursor.execute(
         """
         INSERT INTO habits
@@ -187,11 +186,13 @@ def create_habit(
             habit_type,
             frequency,
             schedule_days,
+            difficulty,
+            motivation,
             active,
             created_at
         )
 
-        VALUES (?, ?, ?, ?, ?, 1, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?)
 
         """,
         (
@@ -200,17 +201,16 @@ def create_habit(
             habit_type,
             frequency,
             schedule_days,
+            difficulty,
+            motivation,
             now,
         )
     )
 
-
     habit_id = cursor.lastrowid
-
 
     conn.commit()
     conn.close()
-
 
     return habit_id
 
@@ -227,7 +227,6 @@ def get_user_habits(
     conn = get_connection()
     cursor = conn.cursor()
 
-
     cursor.execute(
         """
         SELECT
@@ -241,7 +240,10 @@ def get_user_habits(
             formed_at,
             last_review_date,
             controlled,
-            controlled_at
+            controlled_at,
+            difficulty,
+            motivation
+
         FROM habits
 
         WHERE user_id = ?
@@ -256,15 +258,11 @@ def get_user_habits(
         )
     )
 
-
     rows = cursor.fetchall()
-
 
     conn.close()
 
-
     habits = []
-
 
     for row in rows:
 
@@ -281,9 +279,10 @@ def get_user_habits(
                 "last_review_date": row[8],
                 "controlled": bool(row[9]),
                 "controlled_at": row[10],
+                "difficulty": row[11],
+                "motivation": row[12],
             }
         )
-
 
     return habits
 

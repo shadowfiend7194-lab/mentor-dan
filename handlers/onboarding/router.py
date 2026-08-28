@@ -64,6 +64,9 @@ from handlers.goal.habits import (
     save_custom_habit_frequency,
 )
 
+from handlers.goal.add_habit import (
+    save_new_habit_name,
+)
 
 # =========================================================
 # CALLBACK-КНОПКИ ОНБОРДИНГА
@@ -294,6 +297,38 @@ async def text_router(
             return
         
 
+    # =====================================================
+    # РЕДАКТИРОВАНИЕ ПРИВЫЧКИ
+    # =====================================================
+
+    if context.user_data.get(
+        "habit_edit_state"
+    ) == "name":
+
+        handled = await save_habit_name(
+            update,
+            context
+        )
+
+        if handled:
+            return
+
+    if context.user_data.get(
+        "habit_edit_state"
+    ) == "frequency_custom":
+
+        print(
+            "🔥 SAVE CUSTOM DAYS:",
+            update.message.text
+        )
+
+        handled = await save_custom_habit_frequency(
+            update,
+            context
+        )
+
+        if handled:
+            return
 
     # =====================================================
     # ДЭН
@@ -516,15 +551,18 @@ async def text_router(
         if handled:
             return
 
+    
+    
+    
     # =====================================================
-    # ИЗМЕНЕНИЕ НАЗВАНИЯ ПРИВЫЧКИ
+    # PRO — НАЗВАНИЕ НОВОЙ ПРИВЫЧКИ
     # =====================================================
 
     if context.user_data.get(
-        "habit_edit_state"
+        "add_habit_state"
     ) == "name":
 
-        handled = await save_habit_name(
+        handled = await save_new_habit_name(
             update,
             context
         )
@@ -532,26 +570,6 @@ async def text_router(
         if handled:
             return
 
-    # =====================================================
-    # СВОИ ДНИ ПРИВЫЧКИ
-    # =====================================================
-
-    if context.user_data.get(
-        "habit_edit_state"
-    ) == "frequency_custom":
-
-        print(
-            "🔥 SAVE CUSTOM DAYS:",
-            update.message.text
-        )
-
-        handled = await save_custom_habit_frequency(
-            update,
-            context
-        )
-
-        if handled:
-            return
 
     step = context.user_data.get(
         "onboarding_step"
