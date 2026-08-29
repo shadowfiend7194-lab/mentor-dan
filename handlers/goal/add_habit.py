@@ -13,6 +13,15 @@ from database.habits import (
     format_frequency,
 )
 
+from services.subscription import (
+    user_has_pro,
+)
+
+from services.dan.pro_habits import (
+    get_available_goals,
+    set_habit_goal,
+)
+
 
 # =========================================================
 # ДОБАВЛЕНИЕ НОВОЙ ПРИВЫЧКИ
@@ -29,6 +38,37 @@ async def open_add_habit(
         return
 
     await query.answer()
+
+    user_id = update.effective_user.id
+
+    # -----------------------------------------------------
+    # PRO
+    # -----------------------------------------------------
+
+    if not user_has_pro(
+        user_id
+    ):
+
+        await query.edit_message_text(
+            "⭐ <b>Добавление привычек с "
+            "расширенной настройкой доступно в PRO.</b>\n\n"
+            "С активным PRO ты сможешь сразу "
+            "настроить сложность, мотивацию "
+            "и связь привычки с целью.",
+            parse_mode="HTML",
+            reply_markup=InlineKeyboardMarkup(
+                [
+                    [
+                        InlineKeyboardButton(
+                            "⬅️ Назад",
+                            callback_data="goal_habits"
+                        )
+                    ]
+                ]
+            )
+        )
+
+        return
 
     keyboard = [
         [
@@ -69,7 +109,9 @@ async def open_add_habit(
 
 def get_habit_counts(user_id):
 
-    habits = get_user_habits(user_id)
+    habits = get_user_habits(
+        user_id
+    )
 
     good_count = sum(
         1
@@ -98,6 +140,7 @@ async def show_habit_limit(
     query = update.callback_query
 
     if query:
+
         await query.answer()
 
         await query.edit_message_text(
@@ -107,7 +150,7 @@ async def show_habit_limit(
             "⭐ PRO позволяет иметь:\n\n"
             "🟢 до <b>5 полезных</b> привычек\n"
             "🔴 до <b>5 нежелательных</b> привычек\n\n"
-            "<b>Стабильность важнее количества. 💪</b>",
+            "<b>Стабильность важнее количества.</b>",
             parse_mode="HTML",
             reply_markup=InlineKeyboardMarkup(
                 [
@@ -136,18 +179,41 @@ async def add_good_habit(
     if not query:
         return
 
+    user_id = update.effective_user.id
+
+    if not user_has_pro(
+        user_id
+    ):
+
+        await open_add_habit(
+            update,
+            context
+        )
+
+        return
+
     good_count, _ = get_habit_counts(
-        update.effective_user.id
+        user_id
     )
 
     if good_count >= 5:
-        await show_habit_limit(update, context)
+
+        await show_habit_limit(
+            update,
+            context
+        )
+
         return
 
     await query.answer()
 
-    context.user_data["add_habit_type"] = "good"
-    context.user_data["add_habit_state"] = "name"
+    context.user_data[
+        "add_habit_type"
+    ] = "good"
+
+    context.user_data[
+        "add_habit_state"
+    ] = "name"
 
     await query.edit_message_text(
         "🟢 <b>Новая полезная привычка</b>\n\n"
@@ -174,18 +240,41 @@ async def add_bad_habit(
     if not query:
         return
 
+    user_id = update.effective_user.id
+
+    if not user_has_pro(
+        user_id
+    ):
+
+        await open_add_habit(
+            update,
+            context
+        )
+
+        return
+
     _, bad_count = get_habit_counts(
-        update.effective_user.id
+        user_id
     )
 
     if bad_count >= 5:
-        await show_habit_limit(update, context)
+
+        await show_habit_limit(
+            update,
+            context
+        )
+
         return
 
     await query.answer()
 
-    context.user_data["add_habit_type"] = "bad"
-    context.user_data["add_habit_state"] = "name"
+    context.user_data[
+        "add_habit_type"
+    ] = "bad"
+
+    context.user_data[
+        "add_habit_state"
+    ] = "name"
 
     await query.edit_message_text(
         "🔴 <b>Новая нежелательная привычка</b>\n\n"
@@ -214,18 +303,26 @@ async def save_new_habit_name(
     if context.user_data.get(
         "add_habit_state"
     ) != "name":
+
         return False
 
     name = update.message.text.strip()
 
     if not name:
+
         await update.message.reply_text(
             "Напиши название привычки текстом."
         )
+
         return True
 
-    context.user_data["add_habit_name"] = name
-    context.user_data["add_habit_state"] = "frequency"
+    context.user_data[
+        "add_habit_name"
+    ] = name
+
+    context.user_data[
+        "add_habit_state"
+    ] = "frequency"
 
     keyboard = [
         [
@@ -252,7 +349,9 @@ async def save_new_habit_name(
         "📅 <b>Периодичность</b>\n\n"
         "Как часто хочешь выполнять эту привычку?",
         parse_mode="HTML",
-        reply_markup=InlineKeyboardMarkup(keyboard)
+        reply_markup=InlineKeyboardMarkup(
+            keyboard
+        )
     )
 
     return True
@@ -278,18 +377,33 @@ async def add_habit_frequency_callback(
 
     if data == "add_habit_frequency_daily":
 
-        context.user_data["add_habit_frequency"] = "daily"
-        context.user_data["add_habit_schedule_days"] = None
+        context.user_data[
+            "add_habit_frequency"
+        ] = "daily"
+
+        context.user_data[
+            "add_habit_schedule_days"
+        ] = None
 
     elif data == "add_habit_frequency_weekdays":
 
-        context.user_data["add_habit_frequency"] = "weekdays"
-        context.user_data["add_habit_schedule_days"] = None
+        context.user_data[
+            "add_habit_frequency"
+        ] = "weekdays"
+
+        context.user_data[
+            "add_habit_schedule_days"
+        ] = None
 
     elif data == "add_habit_frequency_custom":
 
-        context.user_data["add_habit_frequency"] = "custom"
-        context.user_data["add_habit_state"] = "frequency_custom"
+        context.user_data[
+            "add_habit_frequency"
+        ] = "custom"
+
+        context.user_data[
+            "add_habit_state"
+        ] = "frequency_custom"
 
         await query.message.reply_text(
             "✏️ <b>Свои дни</b>\n\n"
@@ -303,7 +417,9 @@ async def add_habit_frequency_callback(
 
         return
 
-    context.user_data["add_habit_state"] = "difficulty"
+    context.user_data[
+        "add_habit_state"
+    ] = "difficulty"
 
     await show_habit_difficulty(
         query.message,
@@ -326,11 +442,14 @@ async def save_custom_habit_days(
     if context.user_data.get(
         "add_habit_state"
     ) != "frequency_custom":
+
         return False
 
     text = update.message.text.strip()
 
-    parsed = parse_custom_days(text)
+    parsed = parse_custom_days(
+        text
+    )
 
     if not parsed:
 
@@ -344,7 +463,10 @@ async def save_custom_habit_days(
         return True
 
     schedule_days = ",".join(
-        map(str, parsed)
+        map(
+            str,
+            parsed
+        )
     )
 
     context.user_data[
@@ -370,7 +492,7 @@ async def save_custom_habit_days(
 
 
 # =========================================================
-# СЛОЖНОСТЬ 1–5
+# СЛОЖНОСТЬ
 # =========================================================
 
 async def show_habit_difficulty(
@@ -417,7 +539,9 @@ async def show_habit_difficulty(
         "1 — почти не требует усилий\n"
         "5 — действительно придётся себя дисциплинировать",
         parse_mode="HTML",
-        reply_markup=InlineKeyboardMarkup(keyboard)
+        reply_markup=InlineKeyboardMarkup(
+            keyboard
+        )
     )
 
 
@@ -437,9 +561,20 @@ async def add_habit_difficulty_callback(
 
     await query.answer()
 
-    difficulty = int(
-        query.data.split("_")[-1]
-    )
+    try:
+
+        difficulty = int(
+            query.data.split(
+                "_"
+            )[-1]
+        )
+
+    except (
+        TypeError,
+        ValueError,
+    ):
+
+        return
 
     context.user_data[
         "add_habit_difficulty"
@@ -449,20 +584,42 @@ async def add_habit_difficulty_callback(
         "add_habit_state"
     ] = "motivation"
 
+    habit_type = context.user_data.get(
+        "add_habit_type"
+    )
+
+    if habit_type == "good":
+
+        text = (
+            "🧠 <b>Зачем тебе эта привычка?</b>\n\n"
+            "Напиши, что ты хочешь получить, "
+            "сформировав эту привычку.\n\n"
+            "Например:\n"
+            "«Хочу больше энергии»\n"
+            "«Хочу лучше концентрироваться»\n"
+            "«Хочу стать выносливее»"
+        )
+
+    else:
+
+        text = (
+            "🧠 <b>Почему ты хочешь изменить эту привычку?</b>\n\n"
+            "Напиши, почему хочешь избавиться "
+            "от неё или сократить её.\n\n"
+            "Например:\n"
+            "«Хочу меньше зависать в телефоне»\n"
+            "«Хочу наладить режим»\n"
+            "«Хочу перестать откладывать сон»"
+        )
+
     await query.message.reply_text(
-        "💭 <b>Зачем тебе эта привычка?</b>\n\n"
-        "Напиши своими словами, почему ты хочешь "
-        "её сформировать или от неё избавиться.\n\n"
-        "Например:\n"
-        "«Хочу больше энергии и лучше себя чувствовать»\n"
-        "«Хочу меньше зависать в телефоне»\n"
-        "«Хочу наконец-то привести режим в порядок»",
+        text,
         parse_mode="HTML"
     )
 
 
 # =========================================================
-# МОТИВАЦИЯ
+# МОТИВАЦИЯ → ВЫБОР ЦЕЛИ
 # =========================================================
 
 async def save_habit_motivation(
@@ -476,26 +633,189 @@ async def save_habit_motivation(
     if context.user_data.get(
         "add_habit_state"
     ) != "motivation":
+
         return False
 
     motivation = update.message.text.strip()
 
     if not motivation:
+
         await update.message.reply_text(
-            "Напиши пару слов о том, зачем тебе эта привычка."
+            "Напиши пару слов о том, "
+            "зачем тебе эта привычка."
         )
+
         return True
 
     context.user_data[
         "add_habit_motivation"
     ] = motivation
 
+    user_id = update.effective_user.id
+
     # -----------------------------------------------------
-    # СОЗДАЁМ ПРИВЫЧКУ
+    # ПОЛУЧАЕМ ЦЕЛИ
     # -----------------------------------------------------
 
+    goals = get_available_goals(
+        user_id
+    )
+
+    # -----------------------------------------------------
+    # ЕСЛИ ЦЕЛЕЙ НЕТ
+    # -----------------------------------------------------
+
+    if not goals:
+
+        await create_habit_after_goal(
+            update,
+            context,
+            None
+        )
+
+        return True
+
+    # -----------------------------------------------------
+    # ЕСЛИ ЦЕЛИ ЕСТЬ — СПРАШИВАЕМ
+    # -----------------------------------------------------
+
+    context.user_data[
+        "add_habit_state"
+    ] = "goal"
+
+    keyboard = []
+
+    for goal in goals:
+
+        icon = (
+            "⭐"
+            if goal.get("is_main")
+            else "🎯"
+        )
+
+        keyboard.append(
+            [
+                InlineKeyboardButton(
+                    f"{icon} "
+                    f"{goal.get('title', 'Без названия')}",
+                    callback_data=(
+                        f"add_habit_goal_{goal['id']}"
+                    )
+                )
+            ]
+        )
+
+    keyboard.append(
+        [
+            InlineKeyboardButton(
+                "🧠 Для себя / без цели",
+                callback_data="add_habit_goal_none"
+            )
+        ]
+    )
+
+    await update.message.reply_text(
+        "🎯 <b>К какой цели привязать привычку?</b>\n\n"
+        "Выбери направление, которому эта привычка "
+        "помогает двигаться вперёд.\n\n"
+        "Если привычка не относится к конкретной "
+        "цели — выбери «Для себя / без цели».",
+        parse_mode="HTML",
+        reply_markup=InlineKeyboardMarkup(
+            keyboard
+        )
+    )
+
+    return True
+
+
+# =========================================================
+# ВЫБОР ЦЕЛИ
+# =========================================================
+
+async def add_habit_goal_callback(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE
+):
+
+    query = update.callback_query
+
+    if not query:
+        return
+
+    await query.answer()
+
+    if context.user_data.get(
+        "add_habit_state"
+    ) != "goal":
+
+        return
+
+    user_id = update.effective_user.id
+
+    data = query.data
+
+    if data == "add_habit_goal_none":
+
+        goal_id = None
+
+    else:
+
+        try:
+
+            goal_id = int(
+                data.rsplit(
+                    "_",
+                    1
+                )[1]
+            )
+
+        except (
+            TypeError,
+            ValueError,
+            IndexError,
+        ):
+
+            return
+
+        goals = get_available_goals(
+            user_id
+        )
+
+        valid_goal_ids = {
+            goal.get("id")
+            for goal in goals
+        }
+
+        if goal_id not in valid_goal_ids:
+
+            await query.message.reply_text(
+                "❌ Эта цель больше недоступна."
+            )
+
+            return
+
+    await create_habit_after_goal(
+        update,
+        context,
+        goal_id
+    )
+
+
+# =========================================================
+# СОЗДАНИЕ ПРИВЫЧКИ ПОСЛЕ ВЫБОРА ЦЕЛИ
+# =========================================================
+
+async def create_habit_after_goal(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    goal_id=None,
+):
+
+    user_id = update.effective_user.id
+
     habit_id = create_habit(
-        user_id=update.effective_user.id,
+        user_id=user_id,
         name=context.user_data.get(
             "add_habit_name"
         ),
@@ -517,6 +837,25 @@ async def save_habit_motivation(
         )
     )
 
+    # -----------------------------------------------------
+    # СОХРАНЯЕМ СВЯЗЬ С ЦЕЛЬЮ
+    # -----------------------------------------------------
+
+    if (
+        habit_id is not None
+        and goal_id is not None
+    ):
+
+        set_habit_goal(
+            user_id=user_id,
+            habit_id=habit_id,
+            goal_id=goal_id,
+        )
+
+    # -----------------------------------------------------
+    # ДАННЫЕ ДЛЯ ФИНАЛЬНОГО СООБЩЕНИЯ
+    # -----------------------------------------------------
+
     habit_type = context.user_data.get(
         "add_habit_type"
     )
@@ -534,10 +873,37 @@ async def save_habit_motivation(
         "add_habit_schedule_days"
     )
 
+    difficulty = context.user_data.get(
+        "add_habit_difficulty"
+    )
+
+    difficulty_text = (
+        f"{difficulty}/5"
+        if difficulty is not None
+        else "—"
+    )
+
     frequency_text = format_frequency(
         frequency,
         schedule_days
     )
+
+    selected_goal = None
+
+    if goal_id is not None:
+
+        goals = get_available_goals(
+            user_id
+        )
+
+        selected_goal = next(
+            (
+                goal
+                for goal in goals
+                if goal.get("id") == goal_id
+            ),
+            None
+        )
 
     # -----------------------------------------------------
     # ОЧИСТКА СОСТОЯНИЯ
@@ -568,16 +934,39 @@ async def save_habit_motivation(
         else "🔴"
     )
 
-    await update.message.reply_text(
-        f"{emoji} <b>Привычка добавлена.</b>\n\n"
-        f"<b>{name}</b>\n"
-        f"📅 {frequency_text}\n\n"
-        "Теперь она появилась в твоей системе "
-        "и будет учитываться в «Моём дне».\n\n"
-        "Не пытайся сделать всё идеально. "
-        "Главное — начать выполнять.",
-        parse_mode="HTML"
+    goal_text = (
+        selected_goal.get(
+            "title",
+            "Без названия"
+        )
+        if selected_goal
+        else
+        "Для себя / без цели"
     )
+
+    message = (
+        f"{emoji} <b>Привычка добавлена.</b>\n\n"
+        f"<b>{name}</b>\n\n"
+        f"Периодичность: {frequency_text}\n"
+        f"Сложность: {difficulty_text}\n"
+        f"Цель: {goal_text}\n\n"
+        "Теперь она появилась в твоей системе "
+        "и будет учитываться в «Моём дне»."
+    )
+
+    if update.callback_query:
+
+        await update.callback_query.message.reply_text(
+            message,
+            parse_mode="HTML"
+        )
+
+    elif update.message:
+
+        await update.message.reply_text(
+            message,
+            parse_mode="HTML"
+        )
 
     # -----------------------------------------------------
     # ВОЗВРАТ В «МОЮ ЦЕЛЬ»
@@ -587,10 +976,18 @@ async def save_habit_motivation(
         open_habit_management
     )
 
-    await open_habit_management(
-        update,
-        context
-    )
+    if update.callback_query:
+
+        await open_habit_management(
+            update,
+            context
+        )
+
+    else:
+
+        await open_habit_management(
+            update,
+            context
+        )
 
     return True
-

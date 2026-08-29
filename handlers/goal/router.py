@@ -12,10 +12,12 @@ from handlers.goal.navigation import (
     goal_back,
     open_goal_edit,
     open_habit_management,
+    open_goal_add,
 )
 
 from handlers.goal.edit_goal import (
-    edit_current_goal,
+    open_goal_manage,
+    edit_selected_goal,
 )
 
 from handlers.goal.habits import (
@@ -37,6 +39,21 @@ from handlers.goal.add_habit import (
     add_bad_habit,
     add_habit_frequency_callback,
     add_habit_difficulty_callback,
+    add_habit_goal_callback,
+)
+
+from handlers.goal.goal_delete import (
+    open_goal_delete_list,
+    confirm_goal_delete,
+    delete_goal,
+)
+
+from handlers.goal.pro_habit_edit import (
+    edit_habit_pro_difficulty,
+    set_habit_pro_difficulty,
+    edit_habit_pro_motivation,
+    edit_habit_pro_goal,
+    set_habit_pro_goal,
 )
 
 
@@ -60,7 +77,6 @@ async def goal_callback_router(
     )
 
     data = query.data
-
 
     # =====================================================
     # ПРОВЕРКА ЦЕЛИ — ДОСТИГ
@@ -97,9 +113,8 @@ async def goal_callback_router(
 
         return
 
-
     # =====================================================
-    # ОТМЕНА ПОДТВЕРЖДЕНИЯ ДОСТИЖЕНИЯ
+    # ОТМЕНА ПРОВЕРКИ
     # =====================================================
 
     if data == "goal_review_back":
@@ -124,9 +139,8 @@ async def goal_callback_router(
 
         return
 
-
     # =====================================================
-    # ПРОВЕРКА ЦЕЛИ — ПРОДОЛЖАЮ
+    # ПРОДОЛЖАЮ
     # =====================================================
 
     if data == "goal_review_continue":
@@ -167,7 +181,6 @@ async def goal_callback_router(
 
         return
 
-
     # =====================================================
     # НАЗАД К «МОЕЙ ЦЕЛИ»
     # =====================================================
@@ -180,7 +193,6 @@ async def goal_callback_router(
         )
 
         return
-
 
     # =====================================================
     # ИЗМЕНИТЬ ЦЕЛЬ
@@ -195,49 +207,172 @@ async def goal_callback_router(
 
         return
 
-
     # =====================================================
-    # ИЗМЕНИТЬ ТЕКУЩУЮ ЦЕЛЬ
+    # УПРАВЛЕНИЕ КОНКРЕТНОЙ ЦЕЛЬЮ
     # =====================================================
 
-    if data == "goal_edit_current":
+    if data.startswith(
+        "goal_manage_"
+    ):
 
-        await edit_current_goal(
+        await open_goal_manage(
             update,
             context
         )
 
         return
 
-
     # =====================================================
-    # PRO — ДОБАВИТЬ ЦЕЛЬ
+    # ПЕРЕИМЕНОВАТЬ КОНКРЕТНУЮ ЦЕЛЬ
     # =====================================================
 
-    if data == "goal_add_pro":
+    if data.startswith(
+        "goal_rename_"
+    ):
 
-        await query.answer()
-
-        await query.message.reply_text(
-            "⭐ <b>Эта возможность доступна в PRO</b>\n\n"
-            "С PRO ты сможешь добавлять дополнительные цели "
-            "и работать сразу над несколькими направлениями.\n\n"
-            "🚀 Скоро.",
-            parse_mode="HTML",
-            reply_markup=InlineKeyboardMarkup(
-                [
-                    [
-                        InlineKeyboardButton(
-                            "⬅️ Назад",
-                            callback_data="goal_edit"
-                        )
-                    ]
-                ]
-            )
+        await edit_selected_goal(
+            update,
+            context
         )
 
         return
 
+    # =====================================================
+    # ДОБАВИТЬ ЦЕЛЬ
+    # =====================================================
+
+    if data == "goal_add_pro":
+
+        await open_goal_add(
+            update,
+            context
+        )
+
+        return
+
+    # =====================================================
+    # УДАЛЕНИЕ ЦЕЛИ — ПОДТВЕРЖДЕНИЕ
+    # =====================================================
+
+    if data.startswith(
+        "goal_delete_confirm_"
+    ):
+
+        await delete_goal(
+            update,
+            context
+        )
+
+        return
+
+    # =====================================================
+    # УДАЛЕНИЕ ЦЕЛИ — ВЫБОР
+    # =====================================================
+
+    if data.startswith(
+        "goal_delete_"
+    ):
+
+        await confirm_goal_delete(
+            update,
+            context
+        )
+
+        return
+
+    # =====================================================
+    # PRO — РЕДАКТИРОВАНИЕ ПРИВЫЧКИ
+    # =====================================================
+
+    if data.startswith(
+        "habit_pro_locked_"
+    ):
+
+        from handlers.goal.pro_habit_edit import (
+            show_pro_locked,
+            get_habit_id_from_callback,
+        )
+
+        habit_id = (
+            get_habit_id_from_callback(
+                update
+            )
+        )
+
+        if habit_id is None:
+            return
+
+        parts = data.split("_")
+
+        feature = (
+            parts[3]
+            if len(parts) > 3
+            else
+            "difficulty"
+        )
+
+        await show_pro_locked(
+            query,
+            feature,
+            habit_id
+        )
+
+        return
+
+    if data.startswith(
+        "habit_pro_set_difficulty_"
+    ):
+
+        await set_habit_pro_difficulty(
+            update,
+            context
+        )
+
+        return
+
+    if data.startswith(
+        "habit_pro_difficulty_"
+    ):
+
+        await edit_habit_pro_difficulty(
+            update,
+            context
+        )
+
+        return
+
+    if data.startswith(
+        "habit_pro_motivation_"
+    ):
+
+        await edit_habit_pro_motivation(
+            update,
+            context
+        )
+
+        return
+
+    if data.startswith(
+        "habit_pro_set_goal_"
+    ):
+
+        await set_habit_pro_goal(
+            update,
+            context
+        )
+
+        return
+
+    if data.startswith(
+        "habit_pro_goal_"
+    ):
+
+        await edit_habit_pro_goal(
+            update,
+            context
+        )
+
+        return
 
     # =====================================================
     # УПРАВЛЕНИЕ ПРИВЫЧКАМИ
@@ -252,11 +387,6 @@ async def goal_callback_router(
 
         return
 
-
-    # =====================================================
-    # ОТКРЫТЬ УПРАВЛЕНИЕ ПРИВЫЧКАМИ
-    # =====================================================
-
     if data == "habit_edit":
 
         await open_habit_edit(
@@ -266,9 +396,8 @@ async def goal_callback_router(
 
         return
 
-
     # =====================================================
-    # УДАЛЕНИЕ ПРИВЫЧКИ — СПИСОК
+    # УДАЛЕНИЕ ПРИВЫЧКИ
     # =====================================================
 
     if data == "habit_delete":
@@ -279,11 +408,6 @@ async def goal_callback_router(
         )
 
         return
-
-
-    # =====================================================
-    # УДАЛЕНИЕ ПРИВЫЧКИ — ПОДТВЕРЖДЕНИЕ
-    # =====================================================
 
     if data.startswith(
         "habit_delete_confirm_"
@@ -296,11 +420,6 @@ async def goal_callback_router(
 
         return
 
-
-    # =====================================================
-    # УДАЛЕНИЕ ПРИВЫЧКИ — ВЫБОР ПРИВЫЧКИ
-    # =====================================================
-
     if data.startswith(
         "habit_delete_"
     ):
@@ -311,7 +430,6 @@ async def goal_callback_router(
         )
 
         return
-
 
     # =====================================================
     # ПОЛЕЗНЫЕ ПРИВЫЧКИ
@@ -326,7 +444,6 @@ async def goal_callback_router(
 
         return
 
-
     # =====================================================
     # НЕЖЕЛАТЕЛЬНЫЕ ПРИВЫЧКИ
     # =====================================================
@@ -339,7 +456,6 @@ async def goal_callback_router(
         )
 
         return
-
 
     # =====================================================
     # ДОБАВЛЕНИЕ НОВОЙ ПРИВЫЧКИ
@@ -354,9 +470,8 @@ async def goal_callback_router(
 
         return
 
-
     # =====================================================
-    # ВЫБОР ТИПА НОВОЙ ПРИВЫЧКИ
+    # ТИП НОВОЙ ПРИВЫЧКИ
     # =====================================================
 
     if data == "add_habit_good":
@@ -368,7 +483,6 @@ async def goal_callback_router(
 
         return
 
-
     if data == "add_habit_bad":
 
         await add_bad_habit(
@@ -378,9 +492,8 @@ async def goal_callback_router(
 
         return
 
-
     # =====================================================
-    # ПЕРИОДИЧНОСТЬ НОВОЙ ПРИВЫЧКИ
+    # ПЕРИОДИЧНОСТЬ
     # =====================================================
 
     if data in {
@@ -396,7 +509,6 @@ async def goal_callback_router(
 
         return
 
-
     # =====================================================
     # СЛОЖНОСТЬ НОВОЙ ПРИВЫЧКИ
     # =====================================================
@@ -411,8 +523,25 @@ async def goal_callback_router(
         )
 
         return
+    
+    # =====================================================
+    # ЦЕЛЬ НОВОЙ ПРИВЫЧКИ
+    # =====================================================
 
+    if (
+        data == "add_habit_goal_none"
+        or data.startswith(
+            "add_habit_goal_"
+        )
+    ):
 
+        await add_habit_goal_callback(
+            update,
+            context
+        )
+
+        return
+        
     # =====================================================
     # ИЗМЕНЕНИЕ НАЗВАНИЯ ПРИВЫЧКИ
     # =====================================================
@@ -428,9 +557,8 @@ async def goal_callback_router(
 
         return
 
-
     # =====================================================
-    # ИЗМЕНЕНИЕ ПЕРИОДИЧНОСТИ ПРИВЫЧКИ
+    # ИЗМЕНЕНИЕ ПЕРИОДИЧНОСТИ
     # =====================================================
 
     if data.startswith(
@@ -443,11 +571,6 @@ async def goal_callback_router(
         )
 
         return
-
-
-    # =====================================================
-    # ВЫБОР НОВОЙ ПЕРИОДИЧНОСТИ ПРИ РЕДАКТИРОВАНИИ
-    # =====================================================
 
     if data in {
         "edit_frequency_daily",
@@ -462,9 +585,8 @@ async def goal_callback_router(
 
         return
 
-
     # =====================================================
-    # ВЫБОР КОНКРЕТНОЙ ПРИВЫЧКИ
+    # КОНКРЕТНАЯ ПРИВЫЧКА
     # =====================================================
 
     if data.startswith(
@@ -477,4 +599,3 @@ async def goal_callback_router(
         )
 
         return
-

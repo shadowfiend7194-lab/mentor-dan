@@ -11,7 +11,18 @@ from database.habits import (
     format_frequency,
 )
 
-from database.goals import get_main_goal
+from database.goals import (
+    get_user_goals,
+    MAX_GOALS,
+)
+
+from services.subscription import (
+    user_has_pro,
+)
+
+from services.dan.pro_habits import (
+    get_habits_with_goals,
+)
 
 
 # =========================================================
@@ -21,169 +32,426 @@ from database.goals import get_main_goal
 async def show_goal(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE,
-    force_new=False
+    force_new=False,
 ):
 
     user_id = update.effective_user.id
 
-
-    # =====================================================
-    # ЦЕЛЬ
-    # =====================================================
-
-    goal_data = get_main_goal(
-        user_id
+    pro_active = bool(
+        user_has_pro(
+            user_id
+        )
     )
 
-    if goal_data:
-
-        goal = goal_data["title"]
-
-    else:
-
-        goal = context.user_data.get(
-            "main_goal"
-        )
-
-
-    if not goal:
-
-        goal = (
-            "🏆 Активной цели сейчас нет.\n\n"
-            "Предыдущая цель завершена. "
-            "Когда появится новая — мы начнём следующий этап."
-        )
-
-
     # =====================================================
-    # ПРИВЫЧКИ
+    # ДАННЫЕ
     # =====================================================
+
+    goals = get_user_goals(
+        user_id
+    )
 
     habits = get_user_habits(
         user_id
     )
 
+    # =====================================================
+    # PRO ДАННЫЕ
+    # =====================================================
 
-    good_habits = [
-        habit
-        for habit in habits
-        if (
-            habit["habit_type"] == "good"
-            and not habit.get("formed")
+    habits_with_goals = {}
+
+    if pro_active:
+
+        for habit in get_habits_with_goals(
+            user_id
+        ):
+
+            habits_with_goals[
+                habit.get("id")
+            ] = habit
+
+    # =====================================================
+    # ГРУППИРОВКА ПРИВЫЧЕК ПО ЦЕЛЯМ
+    # =====================================================
+
+    grouped = {
+        goal.get("id"): []
+        for goal in goals
+    }
+
+    unlinked = []
+
+    for habit in habits:
+
+        enriched = habits_with_goals.get(
+            habit.get("id"),
+            habit
         )
-    ]
 
-    bad_habits = [
-        habit
-        for habit in habits
-        if (
-            habit["habit_type"] == "bad"
-            and not habit.get("controlled")
+        goal_id = enriched.get(
+            "goal_id"
         )
-    ]
 
+        if (
+            pro_active
+            and goal_id in grouped
+        ):
 
-    # =====================================================
-    # ТЕКСТ
-    # =====================================================
-
-    text = (
-        "🎯 <b>Моя цель</b>\n\n"
-        f"<b>Главная цель:</b>\n"
-        f"{goal}\n\n"
-    )
-
-
-    # =====================================================
-    # ПОЛЕЗНЫЕ ПРИВЫЧКИ
-    # =====================================================
-
-    text += (
-        "🟢 <b>Полезные привычки:</b>\n\n"
-    )
-
-
-    if good_habits:
-
-        for habit in good_habits:
-
-            text += (
-                f"🟢 {habit['name']}\n"
-                f"📅 {format_frequency(habit['frequency'], habit.get('schedule_days'))}\n\n"
+            grouped[
+                goal_id
+            ].append(
+                enriched
             )
+
+        else:
+
+            unlinked.append(
+                enriched
+            )
+
+    # =====================================================
+    # ЗАГОЛОВОК
+    # =====================================================
+
+    lines = [
+        "🎯 <b>Моя цель</b>",
+        "",
+    ]
+
+    # =====================================================
+    # НЕТ ЦЕЛЕЙ
+    # =====================================================
+
+    if not goals:
+
+        lines.extend(
+            [
+                "Пока нет активных целей.",
+                "",
+                "Добавь цель, чтобы Дэн мог "
+                "помогать тебе двигаться "
+                "к конкретному результату.",
+            ]
+        )
+
+    # =====================================================
+    # ЕСТЬ ЦЕЛИ
+    # =====================================================
 
     else:
 
-        text += (
-            "Пока нет полезных привычек.\n\n"
+        lines.extend(
+            [
+                f"Активных целей: "
+                f"<b>{len(goals)}</b>/{MAX_GOALS}",
+                "",
+                "────────────────────",
+                "",
+            ]
         )
 
+        for index, goal in enumerate(
+            goals
+        ):
 
-    # =====================================================
-    # НЕЖЕЛАТЕЛЬНЫЕ ПРИВЫЧКИ
-    # =====================================================
-
-    text += (
-        "🔴 <b>Нежелательные привычки:</b>\n\n"
-    )
-
-
-    if bad_habits:
-
-        for habit in bad_habits:
-
-            text += (
-                f"🔴 {habit['name']}\n"
-                f"📅 {format_frequency(habit['frequency'], habit.get('schedule_days'))}\n\n"
+            goal_id = goal.get(
+                "id"
             )
 
-    else:
+            title = (
+                goal.get("title")
+                or "Без названия"
+            )
 
-        text += (
-            "Пока нет нежелательных привычек.\n\n"
+            marker = (
+                "⭐"
+                if goal.get("is_main")
+                else "🎯"
+            )
+
+            # -------------------------------------------------
+            # ЦЕЛЬ
+            # -------------------------------------------------
+
+            lines.append(
+                f"{marker} <b>{title}</b>"
+            )
+
+            lines.append("")
+
+            # -------------------------------------------------
+            # ПРИВЫЧКИ
+            # -------------------------------------------------
+
+            if pro_active:
+
+                linked = grouped.get(
+                    goal_id,
+                    []
+                )
+
+                if linked:
+
+                    lines.append(
+                        "<b>Привычки:</b>"
+                    )
+
+                    lines.append("")
+
+                    for habit in linked:
+
+                        habit_icon = (
+                            "🟢"
+                            if habit.get(
+                                "habit_type"
+                            ) == "good"
+                            else "🔴"
+                        )
+
+                        habit_name = (
+                            habit.get(
+                                "name"
+                            )
+                            or "Без названия"
+                        )
+
+                        frequency = (
+                            format_frequency(
+                                habit.get(
+                                    "frequency"
+                                ),
+                                habit.get(
+                                    "schedule_days"
+                                )
+                            )
+                        )
+
+                        difficulty = habit.get(
+                            "difficulty"
+                        )
+
+                        difficulty_text = (
+                            f"{difficulty}/5"
+                            if difficulty is not None
+                            else "—"
+                        )
+
+                        lines.append(
+                            f"{habit_icon} "
+                            f"<b>{habit_name}</b>"
+                        )
+
+                        lines.append(
+                            f"   Сложность: "
+                            f"<b>{difficulty_text}</b>"
+                        )
+
+                        lines.append(
+                            f"   {frequency}"
+                        )
+
+                        lines.append("")
+
+                else:
+
+                    lines.append(
+                        "Привычки:"
+                    )
+
+                    lines.append(
+                        "Пока нет связанных привычек."
+                    )
+
+                    lines.append("")
+
+            else:
+
+                lines.extend(
+                    [
+                        "⭐ <b>PRO</b>",
+                        "Связанные привычки, сложность "
+                        "и другие расширенные настройки "
+                        "доступны в PRO.",
+                        "",
+                    ]
+                )
+
+            # -------------------------------------------------
+            # РАЗДЕЛИТЕЛЬ МЕЖДУ ЦЕЛЯМИ
+            # -------------------------------------------------
+
+            if index < len(goals) - 1:
+
+                lines.extend(
+                    [
+                        "────────────────────",
+                        "",
+                    ]
+                )
+
+    # =====================================================
+    # ПРИВЫЧКИ БЕЗ ЦЕЛИ
+    # =====================================================
+
+    if pro_active and unlinked:
+
+        lines.extend(
+            [
+                "────────────────────",
+                "",
+                "<b>Привычки без цели</b>",
+                "",
+            ]
         )
 
+        for habit in unlinked:
+
+            habit_icon = (
+                "🟢"
+                if habit.get(
+                    "habit_type"
+                ) == "good"
+                else "🔴"
+            )
+
+            habit_name = (
+                habit.get(
+                    "name"
+                )
+                or "Без названия"
+            )
+
+            frequency = (
+                format_frequency(
+                    habit.get(
+                        "frequency"
+                    ),
+                    habit.get(
+                        "schedule_days"
+                    )
+                )
+            )
+
+            difficulty = (
+                habit.get(
+                    "difficulty"
+                )
+            )
+
+            difficulty_text = (
+                f"{difficulty}/5"
+                if difficulty is not None
+                else "—"
+            )
+
+            lines.append(
+                f"{habit_icon} <b>{habit_name}</b>"
+            )
+
+            lines.append(
+                f"   Сложность: "
+                f"<b>{difficulty_text}</b>"
+            )
+
+            lines.append(
+                f"   {frequency}"
+            )
+
+            lines.append("")
 
     # =====================================================
     # КНОПКИ
     # =====================================================
 
-    keyboard = [
+    keyboard = []
 
-        [
-            InlineKeyboardButton(
-                "✏️ Изменить цель",
-                callback_data="goal_edit"
+    # -----------------------------------------------------
+    # ДОБАВИТЬ ЦЕЛЬ
+    # -----------------------------------------------------
+
+    if pro_active:
+
+        if len(goals) < MAX_GOALS:
+
+            keyboard.append(
+                [
+                    InlineKeyboardButton(
+                        "➕ Добавить цель",
+                        callback_data="goal_add_pro"
+                    )
+                ]
             )
-        ],
 
-        [
-            InlineKeyboardButton(
-                "🔄 Изменить привычки",
-                callback_data="goal_habits"
+        else:
+
+            lines.extend(
+                [
+                    "────────────────────",
+                    "",
+                    f"🎯 <b>Лимит целей достигнут — "
+                    f"{MAX_GOALS} из {MAX_GOALS}</b>",
+                    "",
+                    "Не распыляйся. Лучше довести "
+                    "несколько действительно важных "
+                    "направлений до результата.",
+                ]
             )
-        ],
 
+    else:
+
+        keyboard.append(
+            [
+                InlineKeyboardButton(
+                    "➕ Добавить цель ⭐ PRO",
+                    callback_data="goal_add_pro"
+                )
+            ]
+        )
+
+    # -----------------------------------------------------
+    # ОСНОВНЫЕ КНОПКИ
+    # -----------------------------------------------------
+
+    keyboard.extend(
         [
-            InlineKeyboardButton(
-                "🏠 Главное меню",
-                callback_data="go_menu"
-            )
-        ],
-
-    ]
-
+            [
+                InlineKeyboardButton(
+                    "✏️ Изменить цель",
+                    callback_data="goal_edit"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    "🔄 Изменить привычки",
+                    callback_data="goal_habits"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    "🏠 Главное меню",
+                    callback_data="go_menu"
+                )
+            ],
+        ]
+    )
 
     markup = InlineKeyboardMarkup(
         keyboard
     )
 
+    text = "\n".join(
+        lines
+    )
 
     # =====================================================
-    # РЕДАКТИРОВАНИЕ СООБЩЕНИЯ
+    # РЕНДЕР
     # =====================================================
 
-    if update.callback_query and not force_new:
+    if (
+        update.callback_query
+        and not force_new
+    ):
 
         await update.callback_query.edit_message_text(
             text,

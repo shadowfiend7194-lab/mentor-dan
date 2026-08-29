@@ -19,4 +19,11 @@ response = client.chat.completions.create(
     ],
 )
 
+
 print(response.choices[0].message.content)
+
+print("ОТВЕТ:")
+print(response.choices[0].message.content)
+
+print("\nUSAGE:")
+print(response.usage)

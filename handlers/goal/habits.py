@@ -299,60 +299,248 @@ async def open_habit(
         "🔴"
     )
 
-    frequency_text = format_frequency(
-        habit.get("frequency"),
-        habit.get("schedule_days")
+    frequency_text = (
+        format_frequency(
+            habit.get("frequency"),
+            habit.get("schedule_days")
+        )
     )
+
+    # =====================================================
+    # PRO
+    # =====================================================
+
+    from services.subscription import (
+        user_has_pro,
+    )
+
+    pro_active = bool(
+        user_has_pro(
+            user_id
+        )
+    )
+
+    # =====================================================
+    # КНОПКИ
+    # =====================================================
 
     keyboard = [
 
         [
+
             InlineKeyboardButton(
                 "✏️ Название",
-                callback_data=f"habit_name_{habit_id}"
+                callback_data=(
+                    f"habit_name_{habit_id}"
+                )
             )
+
         ],
 
         [
+
             InlineKeyboardButton(
                 "📅 Периодичность",
-                callback_data=f"habit_frequency_{habit_id}"
+                callback_data=(
+                    f"habit_frequency_{habit_id}"
+                )
             )
+
         ],
 
         [
+
+            InlineKeyboardButton(
+
+                "🔥 Сложность"
+                if pro_active
+                else
+                "🔥 Сложность ⭐",
+
+                callback_data=(
+
+                    f"habit_pro_difficulty_{habit_id}"
+
+                    if pro_active
+
+                    else
+
+                    f"habit_pro_locked_difficulty_{habit_id}"
+
+                )
+
+            )
+
+        ],
+
+        [
+
+            InlineKeyboardButton(
+
+                "🧠 Мотивация"
+                if pro_active
+                else
+                "🧠 Мотивация ⭐",
+
+                callback_data=(
+
+                    f"habit_pro_motivation_{habit_id}"
+
+                    if pro_active
+
+                    else
+
+                    f"habit_pro_locked_motivation_{habit_id}"
+
+                )
+
+            )
+
+        ],
+
+        [
+
+            InlineKeyboardButton(
+
+                "🎯 Связанная цель"
+                if pro_active
+                else
+                "🎯 Связанная цель ⭐",
+
+                callback_data=(
+
+                    f"habit_pro_goal_{habit_id}"
+
+                    if pro_active
+
+                    else
+                    f"habit_pro_locked_goal_{habit_id}"
+
+                )
+
+            )
+
+        ],
+
+        [
+
             InlineKeyboardButton(
                 "🗑 Удалить привычку",
-                callback_data=f"habit_delete_{habit_id}"
+                callback_data=(
+                    f"habit_delete_{habit_id}"
+                )
             )
+
         ],
 
         [
+
             InlineKeyboardButton(
                 "⬅️ Назад",
                 callback_data=(
+
                     "habit_edit_good"
-                    if habit["habit_type"] == "good"
+
+                    if habit["habit_type"]
+                    == "good"
+
                     else
+
                     "habit_edit_bad"
+
                 )
             )
+
         ],
 
     ]
 
+    # =====================================================
+    # ТЕКСТ
+    # =====================================================
+
     text = (
-        f"{icon} <b>{habit['name']}</b>\n\n"
-        f"📅 {frequency_text}\n\n"
-        "Что хочешь изменить?"
+
+        f"{icon} "
+        f"<b>{habit['name']}</b>\n\n"
+
+        f"📅 {frequency_text}\n"
+
+    )
+
+    if pro_active:
+
+        difficulty = habit.get(
+            "difficulty"
+        )
+
+        if difficulty is not None:
+
+            text += (
+                f"🔥 Сложность: "
+                f"{difficulty}/5\n"
+            )
+
+        else:
+
+            text += (
+                "🔥 Сложность: "
+                "не указана\n"
+            )
+
+        goal_id = habit.get(
+            "goal_id"
+        )
+
+        if goal_id:
+
+            from database.goals import (
+                get_user_goals,
+            )
+
+            goal = next(
+                (
+                    goal
+                    for goal
+                    in get_user_goals(
+                        user_id
+                    )
+                    if goal.get(
+                        "id"
+                    ) == goal_id
+                ),
+                None
+            )
+
+            if goal:
+
+                text += (
+                    "🎯 Цель: "
+                    f"{goal.get('title', 'Без названия')}\n"
+                )
+
+        else:
+
+            text += (
+                "🎯 Цель: "
+                "без привязки\n"
+            )
+
+    text += (
+        "\nЧто хочешь изменить?"
     )
 
     await query.edit_message_text(
-        text,
-        parse_mode="HTML",
-        reply_markup=InlineKeyboardMarkup(keyboard)
-    )
 
+        text,
+
+        parse_mode="HTML",
+
+        reply_markup=InlineKeyboardMarkup(
+            keyboard
+        )
+
+    )
 
 # =========================================================
 # ПОДТВЕРЖДЕНИЕ УДАЛЕНИЯ

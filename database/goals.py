@@ -4,6 +4,13 @@ from database.connection import get_connection
 
 
 # =========================================================
+# ЛИМИТ ЦЕЛЕЙ
+# =========================================================
+
+MAX_GOALS = 3
+
+
+# =========================================================
 # СОЗДАТЬ ЦЕЛЬ
 # =========================================================
 
@@ -13,8 +20,39 @@ def create_goal(
     is_main=False,
 ):
 
+    title = str(
+        title or ""
+    ).strip()
+
+    if not title:
+        return None
+
     conn = get_connection()
     cursor = conn.cursor()
+
+    cursor.execute(
+        """
+        SELECT COUNT(*)
+        FROM goals
+        WHERE user_id = ?
+        AND active = 1
+        """,
+        (
+            user_id,
+        )
+    )
+
+    active_goal_count = cursor.fetchone()[0]
+
+    # -----------------------------------------------------
+    # ЛИМИТ
+    # -----------------------------------------------------
+
+    if active_goal_count >= MAX_GOALS:
+
+        conn.close()
+
+        return None
 
     now = datetime.now().strftime(
         "%Y-%m-%d %H:%M:%S"
@@ -42,8 +80,10 @@ def create_goal(
 
     goal_id = cursor.lastrowid
 
-    # Если это главная цель —
-    # снимаем статус главной с остальных.
+    # -----------------------------------------------------
+    # ЕСЛИ ЭТО ГЛАВНАЯ ЦЕЛЬ
+    # -----------------------------------------------------
+
     if is_main:
 
         cursor.execute(
@@ -188,6 +228,13 @@ def update_goal(
     title,
 ):
 
+    title = str(
+        title or ""
+    ).strip()
+
+    if not title:
+        return False
+
     conn = get_connection()
     cursor = conn.cursor()
 
@@ -206,8 +253,14 @@ def update_goal(
         )
     )
 
+    changed = (
+        cursor.rowcount > 0
+    )
+
     conn.commit()
     conn.close()
+
+    return changed
 
 
 # =========================================================
@@ -222,10 +275,32 @@ def deactivate_goal(
     conn = get_connection()
     cursor = conn.cursor()
 
+    # -----------------------------------------------------
+    # СНАЧАЛА УБИРАЕМ СВЯЗЬ У ПРИВЫЧЕК
+    # -----------------------------------------------------
+
+    cursor.execute(
+        """
+        UPDATE habits
+        SET goal_id = NULL
+        WHERE goal_id = ?
+        AND user_id = ?
+        """,
+        (
+            goal_id,
+            user_id,
+        )
+    )
+
+    # -----------------------------------------------------
+    # ДЕАКТИВИРУЕМ ЦЕЛЬ
+    # -----------------------------------------------------
+
     cursor.execute(
         """
         UPDATE goals
-        SET active = 0,
+        SET
+            active = 0,
             is_main = 0
         WHERE id = ?
         AND user_id = ?
@@ -236,9 +311,14 @@ def deactivate_goal(
         )
     )
 
+    changed = (
+        cursor.rowcount > 0
+    )
+
     conn.commit()
     conn.close()
 
+    return changed
 
 
 # =========================================================

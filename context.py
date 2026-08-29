@@ -49,7 +49,7 @@ def get_user_profile(user_id):
         FROM users
         WHERE user_id = ?
         """,
-        (user_id,),
+        (user_id,)
     )
 
     row = cursor.fetchone()
@@ -68,12 +68,14 @@ def get_user_profile(user_id):
 
 
 # =========================================================
-# ПРИВЫЧКИ
+# КОНТЕКСТ ПРИВЫЧЕК
 # =========================================================
 
 def get_user_habits_context(user_id):
 
-    habits = get_user_habits(user_id)
+    habits = get_user_habits(
+        user_id
+    )
 
     result = []
 
@@ -85,10 +87,12 @@ def get_user_habits_context(user_id):
                 "name": habit.get("name"),
                 "type": habit.get("habit_type"),
                 "frequency": habit.get("frequency"),
+
                 "formed": habit.get(
                     "formed",
                     False,
                 ),
+
                 "controlled": habit.get(
                     "controlled",
                     False,
@@ -100,7 +104,7 @@ def get_user_habits_context(user_id):
 
 
 # =========================================================
-# CHECK-IN
+# КОНТЕКСТ CHECK-IN
 # =========================================================
 
 def get_recent_checkins_context(
@@ -120,11 +124,14 @@ def get_recent_checkins_context(
         result.append(
             {
                 "date": row[0],
+
                 "energy": row[1],
                 "sleep": row[2],
                 "mood": row[3],
                 "stress": row[4],
+
                 "evening_score": row[5],
+
                 "evening_problem": row[6],
                 "evening_positive": row[7],
                 "evening_improve": row[8],
@@ -193,7 +200,9 @@ def get_checkin_trends_context(
         if not values:
             continue
 
-        average = calculate_average(values)
+        average = calculate_average(
+            values
+        )
 
         latest = values[0]
 
@@ -245,23 +254,28 @@ def get_checkin_trends_context(
 
 
 # =========================================================
-# СОСТОЯНИЕ СЕГОДНЯ
+# СОСТОЯНИЕ ПОЛЬЗОВАТЕЛЯ СЕГОДНЯ
 # =========================================================
 
 def get_current_state(user_id):
 
-    row = get_today_checkin(user_id)
+    row = get_today_checkin(
+        user_id
+    )
 
     if not row:
         return {}
 
     return {
         "date": row[0],
+
         "energy": row[1],
         "sleep": row[2],
         "mood": row[3],
         "stress": row[4],
+
         "evening_score": row[5],
+
         "evening_problem": row[6],
         "evening_positive": row[7],
         "evening_improve": row[8],
@@ -269,42 +283,51 @@ def get_current_state(user_id):
 
 
 # =========================================================
-# СТАТИСТИКА
+# СТАТИСТИКА ПОЛЬЗОВАТЕЛЯ
 # =========================================================
 
 def get_user_statistics(user_id):
 
-    stats = get_progress_summary(user_id)
+    stats = get_progress_summary(
+        user_id
+    )
 
     return {
         "best_streak": stats.get(
             "best_streak",
             0,
         ),
+
         "week_completed": stats.get(
             "week_completed",
             0,
         ),
+
         "week_total": stats.get(
             "week_total",
             0,
         ),
+
         "energy": stats.get(
             "energy",
             0,
         ),
+
         "sleep": stats.get(
             "sleep",
             0,
         ),
+
         "mood": stats.get(
             "mood",
             0,
         ),
+
         "stress": stats.get(
             "stress",
             0,
         ),
+
         "evening_score": stats.get(
             "evening_score",
             0,
@@ -313,12 +336,12 @@ def get_user_statistics(user_id):
 
 
 # =========================================================
-# КОНТЕКСТ ДИАЛОГА
+# КОНТЕКСТ ДИАЛОГА ДЭНА
 # =========================================================
 
 def get_conversation_context(
     user_id,
-    limit=8,
+    limit=10,
 ):
 
     rows = get_recent_dan_messages(
@@ -332,65 +355,28 @@ def get_conversation_context(
 
         if isinstance(row, dict):
 
+            result.append(row)
+
+            continue
+
+        if len(row) >= 3:
+
             result.append(
                 {
-                    "role": row.get("role"),
-                    "content": row.get("content"),
+                    "role": row[0],
+                    "content": row[1],
+                    "created_at": row[2],
                 }
             )
 
-            continue
+        elif len(row) >= 2:
 
-        if len(row) >= 2:
-
-            item = {
-                "role": row[0],
-                "content": row[1],
-            }
-
-            result.append(item)
-
-    return result
-
-
-# =========================================================
-# ПАМЯТЬ
-# =========================================================
-
-def get_memories_context(
-    user_id,
-    limit=20,
-):
-
-    memories = get_user_memories(
-        user_id,
-        limit=limit,
-    )
-
-    result = []
-
-    for memory in memories:
-
-        if isinstance(memory, dict):
-
-            item = {}
-
-            for key in (
-                "type",
-                "content",
-                "value",
-                "importance",
-            ):
-
-                if key in memory:
-                    item[key] = memory[key]
-
-            if item:
-                result.append(item)
-
-            continue
-
-        result.append(memory)
+            result.append(
+                {
+                    "role": row[0],
+                    "content": row[1],
+                }
+            )
 
     return result
 
@@ -399,157 +385,74 @@ def get_memories_context(
 # ПОЛНЫЙ КОНТЕКСТ ДЭНА
 # =========================================================
 
-def get_dan_context(
-    user_id,
-    context_level="basic",
-):
-
-    # =====================================================
-    # BASIC
-    # =====================================================
-    #
-    # Обычный разговор.
-    #
-    # Не тянем:
-    # - профиль
-    # - цели
-    # - привычки
-    # - статистику
-    # - check-in
-    # - память
-    #
-    # Нужна только короткая история разговора.
-    # =====================================================
-
-    if context_level == "basic":
-
-        return {
-            "profile": {},
-            "goals": [],
-            "habits": [],
-            "habit_trends": {},
-            "current_state": {},
-            "statistics": {},
-            "memories": [],
-
-            "conversation": get_conversation_context(
-                user_id,
-                limit=4,
-            ),
-        }
-
-    # =====================================================
-    # PERSONAL
-    # =====================================================
-    #
-    # Пользователь говорит о себе,
-    # своих целях, привычках или проблеме.
-    #
-    # Даём персональный контекст,
-    # но не загружаем всю историю.
-    # =====================================================
-
-    if context_level == "personal":
-
-        return {
-            "profile": get_user_profile(
-                user_id
-            ),
-
-            "goals": get_user_goals(
-                user_id
-            ),
-
-            "habits": get_user_habits_context(
-                user_id
-            ),
-
-            "habit_trends": get_habit_trends(
-                user_id
-            ),
-
-            "current_state": get_current_state(
-                user_id
-            ),
-
-            "statistics": get_user_statistics(
-                user_id
-            ),
-
-            "memories": get_memories_context(
-                user_id,
-                limit=10,
-            ),
-
-            "conversation": get_conversation_context(
-                user_id,
-                limit=8,
-            ),
-        }
-
-    # =====================================================
-    # ANALYSIS
-    # =====================================================
-    #
-    # Пользователь явно просит анализ,
-    # совет или глубокий разбор.
-    #
-    # Здесь действительно нужен полный контекст.
-    # =====================================================
-
-    if context_level == "analysis":
-
-        return {
-            "profile": get_user_profile(
-                user_id
-            ),
-
-            "goals": get_user_goals(
-                user_id
-            ),
-
-            "habits": get_user_habits_context(
-                user_id
-            ),
-
-            "habit_trends": get_habit_trends(
-                user_id
-            ),
-
-            "current_state": get_current_state(
-                user_id
-            ),
-
-            "statistics": get_user_statistics(
-                user_id
-            ),
-
-            "memories": get_memories_context(
-                user_id,
-                limit=20,
-            ),
-
-            "conversation": get_conversation_context(
-                user_id,
-                limit=8,
-            ),
-        }
-
-    # =====================================================
-    # FALLBACK
-    # =====================================================
+def get_dan_context(user_id):
 
     return {
-        "profile": {},
-        "goals": [],
-        "habits": [],
-        "habit_trends": {},
-        "current_state": {},
-        "statistics": {},
-        "memories": [],
+
+        # -------------------------------------------------
+        # ПРОФИЛЬ
+        # -------------------------------------------------
+
+        "profile": get_user_profile(
+            user_id
+        ),
+
+        # -------------------------------------------------
+        # ЦЕЛИ
+        # -------------------------------------------------
+
+        "goals": get_user_goals(
+            user_id
+        ),
+
+        # -------------------------------------------------
+        # АКТИВНЫЕ ПРИВЫЧКИ
+        # -------------------------------------------------
+
+        "habits": get_user_habits_context(
+            user_id
+        ),
+
+        # -------------------------------------------------
+        # АНАЛИТИКА ПРИВЫЧЕК
+        # -------------------------------------------------
+
+        "habit_trends": get_habit_trends(
+            user_id
+        ),
+
+        # -------------------------------------------------
+        # ТЕКУЩЕЕ СОСТОЯНИЕ
+        # -------------------------------------------------
+
+        "current_state": get_current_state(
+            user_id
+        ),
+
+        # -------------------------------------------------
+        # ОБЩАЯ СТАТИСТИКА
+        # -------------------------------------------------
+
+        "statistics": get_user_statistics(
+            user_id
+        ),
+
+        # -------------------------------------------------
+        # ПАМЯТЬ
+        # -------------------------------------------------
+
+        "memories": get_user_memories(
+            user_id,
+            limit=30,
+        ),
+
+        # -------------------------------------------------
+        # ДИАЛОГ
+        # -------------------------------------------------
 
         "conversation": get_conversation_context(
             user_id,
-            limit=4,
+            limit=10,
         ),
     }
+

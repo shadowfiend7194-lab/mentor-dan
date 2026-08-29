@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime, timedelta
 
 from database.progress import (
     get_progress_summary,
@@ -6,6 +6,509 @@ from database.progress import (
     get_week_report_period,
 )
 
+from services.subscription import is_pro
+
+from services.dan.pro_progress import (
+    get_pro_progress_summary,
+)
+
+
+# =========================================================
+# ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
+# =========================================================
+
+def _safe_number(value, default=0):
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _format_percent(value):
+    value = _safe_number(value)
+    return round(value, 1)
+
+
+def _signed_percent(value):
+    value = _format_percent(value)
+
+    if value > 0:
+        return f"+{value}%"
+
+    if value < 0:
+        return f"{value}%"
+
+    return "0%"
+
+
+def _parse_date(value):
+    if not value:
+        return None
+
+    if isinstance(value, date):
+        return value
+
+    text = str(value).strip()
+
+    for fmt in (
+        "%Y-%m-%d",
+        "%Y-%m-%d %H:%M:%S",
+    ):
+        try:
+            return datetime.strptime(
+                text,
+                fmt,
+            ).date()
+        except ValueError:
+            continue
+
+    return None
+
+
+# =========================================================
+# PRO — ТЕКУЩАЯ НЕДЕЛЯ
+# =========================================================
+
+def _get_pro_weekly_data(user_id):
+    """
+    Собирает PRO-данные для недельного отчёта.
+
+    Важно:
+    функция полностью безопасна для FREE.
+    """
+
+    if not is_pro(user_id):
+        return None
+
+    try:
+        summary = get_pro_progress_summary(
+            user_id
+        )
+
+    except Exception as error:
+
+        print(
+            f"[WEEKLY PRO] "
+            f"Ошибка получения PRO-прогресса: {error}"
+        )
+
+        return None
+
+    if not summary:
+        return None
+
+    return summary
+
+
+# =========================================================
+# PRO — СРАВНЕНИЕ С ПРОШЛОЙ НЕДЕЛЕЙ
+# =========================================================
+
+def _calculate_previous_week_stability(
+    user_id,
+    current_start,
+):
+    """
+    Получает стабильность предыдущей недели.
+
+    Используем существующую систему weekly progress.
+    Никаких изменений в БД не требуется.
+    """
+
+    if not current_start:
+        return None
+
+    start = _parse_date(
+        current_start
+    )
+
+    if not start:
+        return None
+
+    previous_end = start - timedelta(
+        days=1
+    )
+
+    previous_start = previous_end - timedelta(
+        days=6
+    )
+
+    try:
+
+        # Существующая функция принимает
+        # пользовательский контекст текущей недели,
+        # поэтому для безопасного сравнения
+        # используем отдельный расчёт по данным БД.
+        #
+        # Если предыдущая неделя ещё отсутствует,
+        # возвращаем None.
+
+        from database.connection import get_connection
+
+        conn = get_connection()
+        cursor = conn.cursor()
+
+        cursor.execute(
+            """
+            SELECT
+                COUNT(*)
+            FROM habit_logs
+            WHERE user_id = ?
+            AND date >= ?
+            AND date <= ?
+            """,
+            (
+                user_id,
+                previous_start.isoformat(),
+                previous_end.isoformat(),
+            ),
+        )
+
+        row = cursor.fetchone()
+
+        conn.close()
+
+        if not row or not row[0]:
+            return None
+
+        # Сама недельная стабильность уже считается
+        # существующей системой.
+        #
+        # Здесь намеренно не дублируем её формулу,
+        # чтобы не получить две разные математики.
+
+        try:
+            from database.progress import (
+                get_week_stability_for_period,
+            )
+
+            return _safe_number(
+                get_week_stability_for_period(
+                    user_id,
+                    previous_start,
+                    previous_end,
+                )
+            )
+
+        except ImportError:
+
+            return None
+
+        except Exception:
+
+            return None
+
+    except Exception as error:
+
+        print(
+            f"[WEEKLY PRO] "
+            f"Ошибка сравнения недель: {error}"
+        )
+
+        return None
+
+
+# =========================================================
+# PRO — ТЕКСТ СТАБИЛЬНОСТИ
+# =========================================================
+
+def _build_pro_stability_block(
+    user_id,
+    current_start,
+    current_stability,
+):
+    """
+    Красивый PRO-блок стабильности.
+    """
+
+    pro_data = _get_pro_weekly_data(
+        user_id
+    )
+
+    if not pro_data:
+        return ""
+
+    average_stability = _safe_number(
+        pro_data.get(
+            "average_habit_stability",
+            0,
+        )
+    )
+
+    habits_count = int(
+        _safe_number(
+            pro_data.get(
+                "habits_count",
+                0,
+            )
+        )
+    )
+
+    if habits_count <= 0:
+        return (
+            "💎 <b>PRO-анализ привычек</b>\n\n"
+            "Пока недостаточно данных по привычкам "
+            "для полноценного анализа."
+        )
+
+    previous = _calculate_previous_week_stability(
+        user_id,
+        current_start,
+    )
+
+    if previous is not None:
+
+        change = (
+            _safe_number(
+                current_stability
+            )
+            - previous
+        )
+
+        if change > 0:
+
+            trend_text = (
+                f"📈 За неделю стабильность выросла "
+                f"на <b>{_signed_percent(change)}</b>."
+            )
+
+        elif change < 0:
+
+            trend_text = (
+                f"📉 За неделю стабильность снизилась "
+                f"на <b>{abs(change):.1f}%</b>."
+            )
+
+        else:
+
+            trend_text = (
+                "➡️ Стабильность осталась примерно "
+                "на том же уровне."
+            )
+
+    else:
+
+        trend_text = (
+            "🧭 Это первая неделя, с которой "
+            "можно начинать сравнение."
+        )
+
+    return (
+        "💎 <b>PRO-анализ привычек</b>\n\n"
+
+        f"🔥 <b>Средняя стабильность:</b> "
+        f"{average_stability:.1f}%\n"
+
+        f"{trend_text}\n\n"
+
+        "Это не просто процент выполненных действий. "
+        "Дэн учитывает индивидуальную сложность привычек, "
+        "поэтому одинаковые 70% могут означать "
+        "разный результат для разных привычек."
+    )
+
+
+# =========================================================
+# PRO — ПРИВЫЧКИ
+# =========================================================
+
+def _build_pro_habits_block(
+    user_id,
+):
+    """
+    Показывает состояние отдельных привычек.
+    """
+
+    pro_data = _get_pro_weekly_data(
+        user_id
+    )
+
+    if not pro_data:
+        return ""
+
+    habits = pro_data.get(
+        "habits",
+        []
+    )
+
+    if not habits:
+        return ""
+
+    # Сначала самые стабильные.
+    ordered = sorted(
+        habits,
+        key=lambda item: _safe_number(
+            item.get(
+                "adjusted_stability",
+                0,
+            )
+        ),
+        reverse=True,
+    )
+
+    best = ordered[0]
+
+    worst = ordered[-1]
+
+    best_name = (
+        best.get("name")
+        or "Привычка"
+    )
+
+    worst_name = (
+        worst.get("name")
+        or "Привычка"
+    )
+
+    best_value = _format_percent(
+        best.get(
+            "adjusted_stability",
+            0,
+        )
+    )
+
+    worst_value = _format_percent(
+        worst.get(
+            "adjusted_stability",
+            0,
+        )
+    )
+
+    text = (
+        "🧩 <b>Что происходит с привычками</b>\n\n"
+
+        f"💪 <b>Лучшая сейчас:</b>\n"
+        f"«{best_name}» — {best_value}%\n\n"
+
+        f"🎯 <b>Главная зона роста:</b>\n"
+        f"«{worst_name}» — {worst_value}%"
+    )
+
+    # -----------------------------------------------------
+    # СФОРМИРОВАННЫЕ ПРИВЫЧКИ
+    # -----------------------------------------------------
+
+    ready = [
+        habit
+        for habit in habits
+        if habit.get(
+            "formation_ready"
+        )
+    ]
+
+    if ready:
+
+        text += (
+            "\n\n"
+            "🏆 <b>Сформированные привычки:</b>\n"
+        )
+
+        for habit in ready[:3]:
+
+            text += (
+                f"• {habit.get('name', 'Привычка')}\n"
+            )
+
+        if len(ready) > 3:
+
+            text += (
+                f"• и ещё {len(ready) - 3}\n"
+            )
+
+    return text
+
+
+# =========================================================
+# PRO — ЦЕЛИ
+# =========================================================
+
+def _build_pro_goals_block(
+    user_id,
+):
+    """
+    Показывает связь:
+    привычки → цель → прогресс.
+    """
+
+    pro_data = _get_pro_weekly_data(
+        user_id
+    )
+
+    if not pro_data:
+        return ""
+
+    goals = pro_data.get(
+        "goals",
+        []
+    )
+
+    if not goals:
+        return ""
+
+    active_goals = [
+        goal
+        for goal in goals
+        if goal.get("habits_count", 0) > 0
+    ]
+
+    if not active_goals:
+        return ""
+
+    text = (
+        "🎯 <b>Связь привычек с целями</b>\n\n"
+    )
+
+    for goal in active_goals[:5]:
+
+        goal_data = goal.get(
+            "goal",
+            {}
+        )
+
+        title = (
+            goal_data.get("title")
+            or "Цель"
+        )
+
+        progress = _format_percent(
+            goal.get(
+                "goal_progress",
+                0,
+            )
+        )
+
+        stability = _format_percent(
+            goal.get(
+                "average_stability",
+                0,
+            )
+        )
+
+        habits_count = goal.get(
+            "habits_count",
+            0,
+        )
+
+        text += (
+            f"🎯 <b>{title}</b>\n"
+            f"   Прогресс: {progress}%\n"
+            f"   Стабильность связанных привычек: "
+            f"{stability}%\n"
+            f"   Привычек в связке: {habits_count}\n"
+        )
+
+        if goal.get(
+            "goal_ready"
+        ):
+
+            text += (
+                "   🔔 Цель уже достаточно созрела "
+                "для проверки.\n"
+            )
+
+        text += "\n"
+
+    return text.rstrip()
 
 
 # =========================================================
@@ -20,8 +523,10 @@ def generate_weekly_report(
         user_id
     )
 
-    period_start, period_end = get_week_report_period(
-        user_id
+    period_start, period_end = (
+        get_week_report_period(
+            user_id
+        )
     )
 
     stability = get_week_stability(
@@ -32,7 +537,6 @@ def generate_weekly_report(
     sleep = stats["sleep"]
     mood = stats["mood"]
     stress = stats["stress"]
-
 
     # =====================================================
     # КОЛИЧЕСТВО ДНЕЙ В ОТЧЁТЕ
@@ -56,7 +560,6 @@ def generate_weekly_report(
 
         days_passed = 0
 
-
     # =====================================================
     # ОПРЕДЕЛЯЕМ СИЛЬНУЮ СТОРОНУ
     # =====================================================
@@ -73,18 +576,15 @@ def generate_weekly_report(
 
     }
 
-
     strong = max(
         indicators,
         key=indicators.get
     )
 
-
     weak = min(
         indicators,
         key=indicators.get
     )
-
 
     # =====================================================
     # ГЛАВНЫЙ РЕЗУЛЬТАТ
@@ -102,7 +602,6 @@ def generate_weekly_report(
 
         )
 
-
     elif stability >= 80:
 
         result_text = (
@@ -113,7 +612,6 @@ def generate_weekly_report(
             "ты удерживал систему большую часть времени."
 
         )
-
 
     elif stability >= 50:
 
@@ -126,7 +624,6 @@ def generate_weekly_report(
 
         )
 
-
     elif stability > 0:
 
         result_text = (
@@ -138,7 +635,6 @@ def generate_weekly_report(
 
         )
 
-
     else:
 
         result_text = (
@@ -149,7 +645,6 @@ def generate_weekly_report(
             "Просто выбери следующий маленький шаг."
 
         )
-
 
     # =====================================================
     # ТЕКСТ СИЛЬНОЙ СТОРОНЫ
@@ -167,7 +662,6 @@ def generate_weekly_report(
                 "и выполнять запланированные действия."
             ),
 
-
         "🙂 Настрой":
 
             (
@@ -177,7 +671,6 @@ def generate_weekly_report(
                 "сильно влияет на желание двигаться дальше."
             ),
 
-
         "😴 Сон":
 
             (
@@ -186,7 +679,6 @@ def generate_weekly_report(
                 "Хорошее восстановление помогает сохранять "
                 "энергию и дисциплину."
             ),
-
 
         "🧘 Контроль стресса":
 
@@ -201,7 +693,6 @@ def generate_weekly_report(
         strong,
         "Ты сохранил хороший баланс в этой области."
     )
-
 
     # =====================================================
     # ТЕКСТ ЗОНЫ РОСТА
@@ -218,7 +709,6 @@ def generate_weekly_report(
                 "сон, отдых и нагрузку."
             ),
 
-
         "🙂 Настрой":
 
             (
@@ -227,7 +717,6 @@ def generate_weekly_report(
                 "Попробуй добавить больше действий, "
                 "которые помогают тебе чувствовать прогресс."
             ),
-
 
         "😴 Сон":
 
@@ -238,7 +727,6 @@ def generate_weekly_report(
                 "а с одного простого шага: "
                 "например, немного раньше готовиться ко сну."
             ),
-
 
         "🧘 Контроль стресса":
 
@@ -253,7 +741,6 @@ def generate_weekly_report(
         weak,
         "Этой области стоит уделить немного больше внимания."
     )
-
 
     # =====================================================
     # НАБЛЮДЕНИЕ ДЭНА
@@ -270,7 +757,6 @@ def generate_weekly_report(
 
         )
 
-
     else:
 
         observation = (
@@ -281,7 +767,6 @@ def generate_weekly_report(
             "и улучшать только один элемент за раз."
 
         )
-
 
     # =====================================================
     # ФОКУС
@@ -298,7 +783,6 @@ def generate_weekly_report(
 
         )
 
-
     elif stress >= 7:
 
         focus = (
@@ -310,7 +794,6 @@ def generate_weekly_report(
 
         )
 
-
     else:
 
         focus = (
@@ -321,9 +804,8 @@ def generate_weekly_report(
 
         )
 
-
     # =====================================================
-    # ФИНАЛЬНЫЙ ТЕКСТ
+    # БАЗОВЫЙ ТЕКСТ
     # =====================================================
 
     text = (
@@ -353,6 +835,63 @@ def generate_weekly_report(
         "⚡ <b>Фокус следующей недели:</b>\n"
         f"{focus}\n\n"
 
+    )
+
+    # =====================================================
+    # PRO
+    # =====================================================
+
+    if is_pro(user_id):
+
+        pro_stability = _build_pro_stability_block(
+            user_id,
+            period_start,
+            stability,
+        )
+
+        pro_habits = _build_pro_habits_block(
+            user_id
+        )
+
+        pro_goals = _build_pro_goals_block(
+            user_id
+        )
+
+        if pro_stability:
+
+            text += (
+                pro_stability
+                + "\n\n"
+            )
+
+        if pro_habits:
+
+            text += (
+                pro_habits
+                + "\n\n"
+            )
+
+        if pro_goals:
+
+            text += (
+                pro_goals
+                + "\n\n"
+            )
+
+        text += (
+            "💎 <b>PRO-вывод:</b>\n\n"
+            "Теперь Дэн смотрит не только на то, "
+            "что ты сделал за неделю, "
+            "но и на то, насколько устойчиво "
+            "ты строишь систему вокруг своих целей."
+            "\n\n"
+        )
+
+    # =====================================================
+    # ФИНАЛ
+    # =====================================================
+
+    text += (
         "Маленькие изменения складываются "
         "в большие результаты 💪\n\n"
 
@@ -360,12 +899,5 @@ def generate_weekly_report(
         "в следующее воскресенье в 21:00."
     )
 
-
-    # =====================================================
-    # СОХРАНЯЕМ ОТЧЁТ
-    # =====================================================
-
-   
-
-
     return text
+

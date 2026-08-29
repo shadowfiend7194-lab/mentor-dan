@@ -393,6 +393,7 @@ async def subscribe_pro(
 # PRO — ТЕСТОВАЯ АКТИВАЦИЯ
 # =========================================================
 
+
 async def test_activate_pro(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE
@@ -400,6 +401,10 @@ async def test_activate_pro(
 
     from services.subscription import (
         enable_test_pro,
+    )
+
+    from handlers.pro_setup import (
+        start_pro_setup,
     )
 
     user_id = update.effective_user.id
@@ -420,10 +425,15 @@ async def test_activate_pro(
         except Exception:
             pass
 
-    await show_pro(
+    # =====================================================
+    # СРАЗУ ПОСЛЕ АКТИВАЦИИ — PRO SETUP
+    # =====================================================
+
+    await start_pro_setup(
         update,
         context
     )
+
 
 
 # =========================================================

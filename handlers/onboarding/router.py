@@ -68,6 +68,10 @@ from handlers.goal.add_habit import (
     save_new_habit_name,
 )
 
+from handlers.goal.pro_habit_edit import (
+    pro_habit_edit_text_router,
+)
+
 # =========================================================
 # CALLBACK-КНОПКИ ОНБОРДИНГА
 # =========================================================
@@ -277,6 +281,19 @@ async def text_router(
 
     if not update.message:
         return
+    
+    # =====================================================
+    # PRO — РЕДАКТИРОВАНИЕ ПРИВЫЧКИ
+    # =====================================================
+
+    handled = await pro_habit_edit_text_router(
+        update,
+        context
+    )
+
+    if handled:
+        return
+
 
     print("🔥 TEXT ROUTER WORKS")
     print("💬 TEXT:", update.message.text)

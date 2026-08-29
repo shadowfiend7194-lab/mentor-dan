@@ -60,9 +60,7 @@ def parse_custom_days(text):
         "воскресенье": 6,
     }
 
-
     result = []
-
 
     for item in text.split(","):
 
@@ -73,10 +71,8 @@ def parse_custom_days(text):
                 mapping[item]
             )
 
-
     if not result:
         return None
-
 
     return sorted(
         set(result)
@@ -92,7 +88,6 @@ def format_custom_days(schedule_days):
     if not schedule_days:
         return "Не указано"
 
-
     try:
 
         days = [
@@ -100,18 +95,15 @@ def format_custom_days(schedule_days):
             for x in str(schedule_days).split(",")
         ]
 
-    except:
+    except Exception:
 
         return "Не указано"
-
-
 
     return ", ".join(
         DAY_NAMES[d]
         for d in days
         if d in DAY_NAMES
     )
-
 
 
 # =========================================================
@@ -126,10 +118,8 @@ def format_frequency(
     if frequency == "daily":
         return "Каждый день"
 
-
     if frequency == "weekdays":
         return "Понедельник–пятница"
-
 
     if frequency == "custom":
 
@@ -137,9 +127,7 @@ def format_frequency(
             schedule_days
         )
 
-
     return "Не указано"
-
 
 
 # =========================================================
@@ -215,7 +203,6 @@ def create_habit(
     return habit_id
 
 
-
 # =========================================================
 # ПОЛУЧЕНИЕ ПРИВЫЧЕК
 # =========================================================
@@ -242,7 +229,9 @@ def get_user_habits(
             controlled,
             controlled_at,
             difficulty,
-            motivation
+            motivation,
+            goal_id,
+            pro_status
 
         FROM habits
 
@@ -281,11 +270,12 @@ def get_user_habits(
                 "controlled_at": row[10],
                 "difficulty": row[11],
                 "motivation": row[12],
+                "goal_id": row[13],
+                "pro_status": row[14],
             }
         )
 
     return habits
-
 
 
 # =========================================================
@@ -300,25 +290,17 @@ def is_habit_scheduled_on_date(
     if check_date is None:
         check_date = date.today()
 
-
     weekday = check_date.weekday()
-
 
     frequency = habit.get(
         "frequency"
     )
 
-
     if frequency == "daily":
         return True
 
-
-
     if frequency == "weekdays":
-
         return weekday < 5
-
-
 
     if frequency == "custom":
 
@@ -326,10 +308,8 @@ def is_habit_scheduled_on_date(
             "schedule_days"
         )
 
-
         if not days:
             return False
-
 
         try:
 
@@ -338,21 +318,18 @@ def is_habit_scheduled_on_date(
                 for x in str(days).split(",")
             }
 
-        except:
+        except Exception:
 
             return False
 
-
-
         return weekday in selected
-
-
 
     return False
 
 
-
-# совместимость со старым кодом
+# =========================================================
+# СОВМЕСТИМОСТЬ СО СТАРЫМ КОДОМ
+# =========================================================
 
 def is_habit_scheduled_today(
     habit,
@@ -363,7 +340,6 @@ def is_habit_scheduled_today(
         habit,
         check_date
     )
-
 
 
 # =========================================================
@@ -378,9 +354,7 @@ def complete_habit(
     conn = get_connection()
     cursor = conn.cursor()
 
-
     today = date.today().isoformat()
-
 
     cursor.execute(
         """
@@ -407,10 +381,8 @@ def complete_habit(
         )
     )
 
-
     conn.commit()
     conn.close()
-
 
 
 # =========================================================
@@ -424,9 +396,7 @@ def is_completed_today(
     conn = get_connection()
     cursor = conn.cursor()
 
-
     today = date.today().isoformat()
-
 
     cursor.execute(
         """
@@ -445,29 +415,25 @@ def is_completed_today(
         )
     )
 
-
     row = cursor.fetchone()
-
 
     conn.close()
 
-
-
     if not row:
         return False
-
 
     return bool(
         row[0]
     )
 
 
-
 # =========================================================
 # СЕРИЯ
 # =========================================================
 
-def get_habit_streak(habit_id):
+def get_habit_streak(
+    habit_id
+):
 
     conn = get_connection()
     cursor = conn.cursor()
@@ -475,12 +441,19 @@ def get_habit_streak(habit_id):
     cursor.execute(
         """
         SELECT date
+
         FROM habit_logs
+
         WHERE habit_id = ?
+
         AND completed = 1
+
         ORDER BY date DESC
+
         """,
-        (habit_id,)
+        (
+            habit_id,
+        )
     )
 
     rows = cursor.fetchall()
@@ -499,13 +472,16 @@ def get_habit_streak(habit_id):
     }
 
     streak = 0
+
     current = date.today()
 
     while current in completed_dates:
 
         streak += 1
 
-        current -= timedelta(days=1)
+        current -= timedelta(
+            days=1
+        )
 
     return streak
 
@@ -522,12 +498,9 @@ def get_habit_week_target(
         user_id
     )
 
-
     total = 0
 
-
     today = date.today()
-
 
     for i in range(7):
 
@@ -536,9 +509,7 @@ def get_habit_week_target(
             timedelta(days=i)
         )
 
-
         for habit in habits:
-
 
             if is_habit_scheduled_on_date(
                 habit,
@@ -546,8 +517,6 @@ def get_habit_week_target(
             ):
 
                 total += 1
-
-
 
     return total
 
@@ -575,11 +544,24 @@ def get_habit(
             created_at,
             formed,
             formed_at,
-            last_review_date
+            last_review_date,
+            controlled,
+            controlled_at,
+            difficulty,
+            motivation,
+            goal_id,
+            pro_status
+
         FROM habits
+
         WHERE id = ?
+
         AND user_id = ?
+
         AND active = 1
+
+        LIMIT 1
+
         """,
         (
             habit_id,
@@ -604,6 +586,12 @@ def get_habit(
         "formed": bool(row[6]),
         "formed_at": row[7],
         "last_review_date": row[8],
+        "controlled": bool(row[9]),
+        "controlled_at": row[10],
+        "difficulty": row[11],
+        "motivation": row[12],
+        "goal_id": row[13],
+        "pro_status": row[14],
     }
 
 
@@ -623,10 +611,15 @@ def mark_habit_reviewed(
     cursor.execute(
         """
         UPDATE habits
+
         SET last_review_date = ?
+
         WHERE id = ?
+
         AND user_id = ?
+
         AND active = 1
+
         """,
         (
             review_date,
@@ -658,12 +651,17 @@ def mark_habit_formed(
     cursor.execute(
         """
         UPDATE habits
+
         SET
             formed = 1,
             formed_at = ?
+
         WHERE id = ?
+
         AND user_id = ?
+
         AND active = 1
+
         """,
         (
             formed_at,
@@ -674,6 +672,7 @@ def mark_habit_formed(
 
     conn.commit()
     conn.close()
+
 
 # =========================================================
 # ДЕРЖАТЬ ПЛОХУЮ ПРИВЫЧКУ ПОД КОНТРОЛЕМ
@@ -700,21 +699,27 @@ def mark_habit_controlled(
             controlled_at = ?
 
         WHERE id = ?
+
         AND user_id = ?
+
         AND active = 1
 
         """,
         (
             controlled_at,
             habit_id,
-            user_id
+            user_id,
         )
     )
 
     conn.commit()
     conn.close()
 
-    
+
+# =========================================================
+# УДАЛЕНИЕ ПРИВЫЧКИ
+# =========================================================
+
 def mark_habit_removed(
     user_id,
     habit_id
@@ -726,9 +731,13 @@ def mark_habit_removed(
     cursor.execute(
         """
         UPDATE habits
+
         SET active = 0
+
         WHERE id = ?
+
         AND user_id = ?
+
         """,
         (
             habit_id,
@@ -738,3 +747,178 @@ def mark_habit_removed(
 
     conn.commit()
     conn.close()
+
+
+# =========================================================
+# ПОЛУЧИТЬ ЛОГИ ПРИВЫЧКИ ЗА ПЕРИОД
+# =========================================================
+
+def get_habit_logs(
+    habit_id,
+    start_date,
+    end_date
+):
+
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    cursor.execute(
+        """
+        SELECT
+            date,
+            completed
+
+        FROM habit_logs
+
+        WHERE habit_id = ?
+
+        AND date >= ?
+
+        AND date <= ?
+
+        ORDER BY date ASC
+
+        """,
+        (
+            habit_id,
+            start_date.isoformat(),
+            end_date.isoformat(),
+        )
+    )
+
+    rows = cursor.fetchall()
+
+    conn.close()
+
+    return [
+        {
+            "date": row[0],
+            "completed": bool(row[1]),
+        }
+        for row in rows
+    ]
+
+
+# =========================================================
+# СТАТИСТИКА ОДНОЙ ПРИВЫЧКИ
+# =========================================================
+
+def get_habit_completion_stats(
+    habit,
+    start_date,
+    end_date
+):
+
+    logs = get_habit_logs(
+        habit["id"],
+        start_date,
+        end_date,
+    )
+
+    logs_by_date = {
+        item["date"]: item["completed"]
+        for item in logs
+    }
+
+    scheduled = 0
+    completed = 0
+
+    current = start_date
+
+    while current <= end_date:
+
+        if is_habit_scheduled_on_date(
+            habit,
+            current
+        ):
+
+            scheduled += 1
+
+            if logs_by_date.get(
+                current.isoformat(),
+                False
+            ):
+
+                completed += 1
+
+        current += timedelta(
+            days=1
+        )
+
+    percentage = (
+        round(
+            completed /
+            scheduled *
+            100
+        )
+        if scheduled
+        else 0
+    )
+
+    return {
+        "scheduled": scheduled,
+        "completed": completed,
+        "percentage": percentage,
+    }
+
+
+# =========================================================
+# СТАБИЛЬНОСТЬ ПРИВЫЧКИ
+# =========================================================
+
+def get_habit_stability(
+    habit,
+    days=14
+):
+
+    if days < 1:
+        days = 1
+
+    today = date.today()
+
+    start_date = (
+        today -
+        timedelta(days=days - 1)
+    )
+
+    stats = get_habit_completion_stats(
+        habit,
+        start_date,
+        today,
+    )
+
+    return {
+        "habit_id": habit.get("id"),
+        "habit_name": habit.get("name"),
+        "scheduled": stats["scheduled"],
+        "completed": stats["completed"],
+        "stability": stats["percentage"],
+        "period_days": days,
+    }
+
+
+# =========================================================
+# СТАБИЛЬНОСТЬ ВСЕХ ПРИВЫЧЕК
+# =========================================================
+
+def get_user_habit_stability(
+    user_id,
+    days=14
+):
+
+    habits = get_user_habits(
+        user_id
+    )
+
+    result = []
+
+    for habit in habits:
+
+        result.append(
+            get_habit_stability(
+                habit,
+                days=days,
+            )
+        )
+
+    return result

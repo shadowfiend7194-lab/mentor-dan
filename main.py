@@ -90,7 +90,43 @@ from handlers.goal.add_habit import (
     save_habit_motivation,
 )
 
+from handlers.goal.edit_goal import (
+    goal_text_router,
+)
+
 from database.connection import get_connection
+
+
+from handlers.pro_setup import (
+    pro_setup_add_goal,
+    save_pro_setup_goal,
+    pro_setup_goals_done,
+
+    pro_setup_habit_start,
+    pro_setup_difficulty,
+    pro_setup_motivation,
+
+    pro_setup_goal_new,
+    save_goal_from_habit,
+    pro_setup_goal_selected,
+
+    pro_setup_add_habit,
+    pro_setup_new_habit_type,
+    save_new_pro_habit_name,
+    pro_setup_new_frequency,
+    save_new_pro_habit_days,
+    pro_setup_new_difficulty,
+    save_new_pro_habit_motivation,
+
+    pro_setup_new_goal_create,
+    save_new_habit_goal_name,
+    pro_setup_new_goal_selected,
+
+    pro_setup_finish,
+    pro_setup_later,
+
+    pro_setup_text_router,
+)
 
 # =========================================================
 # ЛОГИРОВАНИЕ
@@ -410,9 +446,20 @@ def main():
             pattern=(
                 r"^(goal_back|"
                 r"goal_edit|"
-                r"goal_edit_current|"
+                r"goal_manage_\d+|"
+                r"goal_rename_\d+|"
                 r"goal_add_pro|"
+                r"goal_delete_\d+|"
+                r"goal_delete_confirm_\d+|"
                 r"goal_habits|"
+                r"goal_delete_\d+|"
+                r"goal_delete_confirm_\d+|"
+                r"habit_pro_locked_(difficulty|motivation|goal)_\d+|"
+                r"habit_pro_difficulty_\d+|"
+                r"habit_pro_motivation_\d+|"
+                r"habit_pro_goal_\d+|"
+                r"habit_pro_set_difficulty_\d+_[1-5]|"
+                r"habit_pro_set_goal_\d+_(none|\d+)|"
                 r"habit_edit|"
                 r"habit_edit_good|"
                 r"habit_edit_bad|"
@@ -426,6 +473,7 @@ def main():
                 r"add_habit_frequency_weekdays|"
                 r"add_habit_frequency_custom|"
                 r"add_habit_difficulty_[1-5]|"
+                r"add_habit_goal_(none|\d+)|"
                 r"habit_edit_\d+|"
                 r"habit_name_\d+|"
                 r"habit_frequency_\d+|"
@@ -606,6 +654,159 @@ def main():
             confirm_delete_all_user_data,
             pattern="^confirm_delete_all$"
         )
+    )
+
+    
+
+
+    # =====================================================
+    # PRO SETUP
+    # =====================================================
+
+    app.add_handler(
+        CallbackQueryHandler(
+            pro_setup_add_goal,
+            pattern=r"^pro_setup_add_goal$"
+        )
+    )
+
+    app.add_handler(
+        CallbackQueryHandler(
+            pro_setup_goals_done,
+            pattern=r"^pro_setup_goals_done$"
+        )
+    )
+
+    # -----------------------------------------------------
+    # СУЩЕСТВУЮЩИЕ ПРИВЫЧКИ
+    # -----------------------------------------------------
+
+    app.add_handler(
+        CallbackQueryHandler(
+            pro_setup_habit_start,
+            pattern=r"^pro_setup_habit_start$"
+        )
+    )
+
+    app.add_handler(
+        CallbackQueryHandler(
+            pro_setup_difficulty,
+            pattern=r"^pro_setup_difficulty_[1-5]$"
+        )
+    )
+
+    # -----------------------------------------------------
+    # ЦЕЛИ СУЩЕСТВУЮЩИХ ПРИВЫЧЕК
+    # -----------------------------------------------------
+
+    app.add_handler(
+        CallbackQueryHandler(
+            pro_setup_goal_new,
+            pattern=r"^pro_setup_goal_new$"
+        )
+    )
+
+    app.add_handler(
+        CallbackQueryHandler(
+            pro_setup_goal_selected,
+            pattern=r"^pro_setup_goal_(none|\d+)$"
+        )
+    )
+
+    # -----------------------------------------------------
+    # НОВАЯ ПРИВЫЧКА
+    # -----------------------------------------------------
+
+    app.add_handler(
+        CallbackQueryHandler(
+            pro_setup_add_habit,
+            pattern=r"^pro_setup_add_habit$"
+        )
+    )
+
+    app.add_handler(
+        CallbackQueryHandler(
+            pro_setup_new_habit_type,
+            pattern=r"^pro_setup_new_(good|bad)$"
+        )
+    )
+
+    app.add_handler(
+        CallbackQueryHandler(
+            pro_setup_new_frequency,
+            pattern=(
+                r"^pro_setup_new_frequency_"
+                r"(daily|weekdays|custom)$"
+            )
+        )
+    )
+
+    app.add_handler(
+        CallbackQueryHandler(
+            pro_setup_new_difficulty,
+            pattern=r"^pro_setup_new_difficulty_[1-5]$"
+        )
+    )
+
+    # -----------------------------------------------------
+    # ЦЕЛЬ НОВОЙ ПРИВЫЧКИ
+    # -----------------------------------------------------
+
+    app.add_handler(
+        CallbackQueryHandler(
+            pro_setup_new_goal_create,
+            pattern=r"^pro_setup_new_goal_create$"
+        )
+    )
+
+    app.add_handler(
+        CallbackQueryHandler(
+            pro_setup_new_goal_selected,
+            pattern=r"^pro_setup_new_goal_(none|\d+)$"
+        )
+    )
+
+    # -----------------------------------------------------
+    # ЗАВЕРШЕНИЕ
+    # -----------------------------------------------------
+
+    app.add_handler(
+        CallbackQueryHandler(
+            pro_setup_finish,
+            pattern=r"^pro_setup_finish$"
+        )
+    )
+
+    app.add_handler(
+        CallbackQueryHandler(
+            pro_setup_later,
+            pattern=r"^pro_setup_later$"
+        )
+    )
+    
+
+    # =====================================================
+    # ТЕКСТОВОЕ УПРАВЛЕНИЕ ЦЕЛЯМИ
+    # =====================================================
+
+    app.add_handler(
+        MessageHandler(
+            filters.TEXT & ~filters.COMMAND,
+            goal_text_router
+        ),
+        group=-1
+    )
+
+    # -----------------------------------------------------
+    # ТЕКСТ PRO SETUP
+    # -----------------------------------------------------
+
+    app.add_handler(
+        MessageHandler(
+            filters.TEXT & ~filters.COMMAND,
+            pro_setup_text_router
+        ),
+        group=-1
     )
 
 
