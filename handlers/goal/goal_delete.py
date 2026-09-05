@@ -6,6 +6,8 @@ from telegram import (
 
 from telegram.ext import ContextTypes
 
+from services.subscription import user_has_pro
+
 from database.goals import (
     get_user_goals,
     deactivate_goal,
@@ -30,12 +32,16 @@ async def open_goal_delete_list(
 
     user_id = update.effective_user.id
 
-    goals = get_user_goals(
-        user_id
-    )
+    pro_active = bool(user_has_pro(user_id))
+
+    goals = [
+        goal
+        for goal in get_user_goals(user_id)
+        if pro_active or goal.get("pro_status") != "frozen"
+    ]
 
     # -----------------------------------------------------
-    # НЕТ ЦЕЛЕЙ
+    # НЕТ ДОСТУПНЫХ ЦЕЛЕЙ
     # -----------------------------------------------------
 
     if not goals:
@@ -172,6 +178,22 @@ async def confirm_goal_delete(
                         )
                     ]
                 ]
+            )
+        )
+
+        return
+
+    if (
+        goal.get("pro_status") == "frozen"
+        and not user_has_pro(user_id)
+    ):
+
+        await query.edit_message_text(
+            "🔒 <b>Цель заморожена</b>\n\n"
+            "Удалить её можно только при активном PRO.",
+            parse_mode="HTML",
+            reply_markup=InlineKeyboardMarkup(
+                [[InlineKeyboardButton("⬅️ Назад", callback_data="goal_edit")]]
             )
         )
 

@@ -12,7 +12,6 @@ from database.habits import (
 )
 
 from database.goals import (
-    cleanup_phantom_menu_goal,
     get_user_goals,
     FREE_MAX_GOALS,
     PRO_MAX_GOALS,
@@ -54,8 +53,6 @@ async def show_goal(
 ):
 
     user_id = update.effective_user.id
-
-    cleanup_phantom_menu_goal(user_id)
 
     pro_active = bool(
         user_has_pro(

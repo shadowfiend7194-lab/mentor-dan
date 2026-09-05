@@ -12,7 +12,6 @@ from database.goals import (
     update_goal,
     FREE_MAX_GOALS,
     PRO_MAX_GOALS,
-    cleanup_phantom_menu_goal,
 )
 
 from services.subscription import (
@@ -41,8 +40,6 @@ def get_goal_by_id(
     ):
 
         return None
-
-    cleanup_phantom_menu_goal(user_id)
 
     goals = get_user_goals(
         user_id
@@ -466,7 +463,10 @@ async def save_new_goal(
 
     from handlers.goal.screen import show_goal
 
-    await open_goal_manage(update, context)
+    await show_goal(
+        update,
+        context
+    )
 
     return True
 

@@ -1,121 +1,37 @@
-from database.connection import get_connection
+"""
+Совместимый фасад истории Дэна.
+
+Каноническое хранилище находится в database.dan.conversations.
+Старый вариант обращался к несуществующему столбцу content.
+"""
+
+from database.dan.conversations import (
+    save_dan_message,
+    get_dan_messages,
+    get_recent_dan_messages,
+    clear_dan_messages,
+)
 
 
-# =========================================================
-# ДОБАВИТЬ СООБЩЕНИЕ В ИСТОРИЮ ДИАЛОГА
-# =========================================================
-
-def add_dan_message(
-    user_id,
-    role,
-    content
-):
-    """
-    Сохраняет сообщение пользователя или Дэна
-    в историю диалога.
-    
-    role:
-        user
-        assistant
-    """
-
-    conn = get_connection()
-    cursor = conn.cursor()
-
-    cursor.execute(
-        """
-        INSERT INTO dan_messages (
-            user_id,
-            role,
-            content
-        )
-        VALUES (?, ?, ?)
-        """,
-        (
-            user_id,
-            role,
-            content
-        )
+def add_dan_message(user_id, role, content):
+    return save_dan_message(
+        user_id=user_id,
+        role=role,
+        message=content,
     )
 
-    conn.commit()
-    conn.close()
 
-
-# =========================================================
-# ПОЛУЧИТЬ ПОСЛЕДНИЕ СООБЩЕНИЯ
-# =========================================================
-
-def get_dan_history(
-    user_id,
-    limit=10
-):
-    """
-    Получает последние сообщения
-    пользователя и Дэна.
-    """
-
-    conn = get_connection()
-    cursor = conn.cursor()
-
-    cursor.execute(
-        """
-        SELECT
-            role,
-            content,
-            created_at
-        FROM dan_messages
-        WHERE user_id = ?
-        ORDER BY id DESC
-        LIMIT ?
-        """,
-        (
-            user_id,
-            limit
-        )
-    )
-
-    rows = cursor.fetchall()
-
-    conn.close()
-
-    rows.reverse()
-
-    history = []
-
-    for row in rows:
-
-        history.append({
+def get_dan_history(user_id, limit=10):
+    rows = get_dan_messages(user_id, limit=limit)
+    return [
+        {
             "role": row[0],
             "content": row[1],
-            "created_at": row[2]
-        })
+            "created_at": row[2],
+        }
+        for row in rows
+    ]
 
-    return history
 
-
-# =========================================================
-# ОЧИСТИТЬ ИСТОРИЮ
-# =========================================================
-
-def clear_dan_history(
-    user_id
-):
-    """
-    Полностью очищает историю диалога Дэна
-    конкретного пользователя.
-    """
-
-    conn = get_connection()
-    cursor = conn.cursor()
-
-    cursor.execute(
-        """
-        DELETE FROM dan_messages
-        WHERE user_id = ?
-        """,
-        (user_id,)
-    )
-
-    conn.commit()
-    conn.close()
+def clear_dan_history(user_id):
+    return clear_dan_messages(user_id)

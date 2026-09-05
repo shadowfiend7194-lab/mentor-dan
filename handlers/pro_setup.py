@@ -6,6 +6,8 @@ from telegram import (
 
 from telegram.ext import ContextTypes
 
+from services.subscription import complete_pro_setup
+
 from database.habits import (
     parse_custom_days,
     format_frequency,
@@ -186,16 +188,6 @@ async def show_goals_stage(
             )
         ]
     )
-
-    keyboard.append(
-        [
-            InlineKeyboardButton(
-                "⏭ Сделать позже",
-                callback_data="pro_setup_later"
-            )
-        ]
-    )
-
     await send_or_reply(
         update,
         "\n".join(lines),
@@ -302,7 +294,7 @@ async def save_pro_setup_goal(
         await update.message.reply_text(
             "🧠 Сейчас новую цель добавить нельзя.\n\n"
             "Проверь, не достиг ли ты лимита "
-            "в 5 активных целей."
+            "в 3 активных целей."
         )
 
         return True
@@ -831,7 +823,7 @@ async def pro_setup_goal_new(
 
         await query.message.reply_text(
             "🧠 <b>Новых целей пока достаточно.</b>\n\n"
-            "У тебя уже максимум — 5 целей.\n\n"
+            "У тебя уже максимум — 3 цели.\n\n"
             "Не будем распыляться. Сначала "
             "двигаем существующие.",
             parse_mode="HTML"
@@ -903,7 +895,7 @@ async def save_goal_from_habit(
         await update.message.reply_text(
             "🧠 Не получилось создать цель.\n\n"
             "Возможно, уже достигнут лимит "
-            "в 5 активных целей."
+            "в 3 активных целей."
         )
 
         return True
@@ -1845,7 +1837,7 @@ async def pro_setup_new_goal_create(
     ):
 
         await query.message.reply_text(
-            "🧠 У тебя уже 5 целей — это максимум.\n\n"
+            "🧠 У тебя уже 3 цели — это максимум.\n\n"
             "Выбери одну из существующих целей "
             "для этой привычки.",
             parse_mode="HTML"
@@ -1918,7 +1910,7 @@ async def save_new_habit_goal_name(
 
         await update.message.reply_text(
             "Не получилось создать цель. "
-            "У тебя может быть уже 5 активных целей."
+            "У тебя может быть уже 3 активных цели."
         )
 
         return True
@@ -2181,6 +2173,13 @@ async def pro_setup_finish(
         state
     )
 
+    # Фиксируем завершение PRO Setup в subscriptions.
+    # Это критично: повторная активация PRO после окончания
+    # должна восстановить данные, а не запускать Setup заново.
+    complete_pro_setup(
+        update.effective_user.id
+    )
+
     await query.message.reply_text(
         "🔥 <b>Всё готово.</b>\n\n"
         "Теперь Дэн понимает не только то, "
@@ -2205,24 +2204,38 @@ async def pro_setup_later(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE,
 ):
+    """
+    Совместимость со старым callback.
 
+    Кнопка «Сделать позже» больше не показывается в PRO Setup.
+    Если старый callback всё же пришёл, Setup не завершается
+    и не помечается выполненным — пользователь возвращается
+    к текущему этапу настройки.
+    """
     query = update.callback_query
 
     if not query:
         return
 
-    await query.answer()
+    try:
+        await query.answer()
+    except Exception:
+        pass
 
-    clear_state(
-        context
-    )
+    state = get_state(context)
 
-    await query.message.reply_text(
-        "👍 Хорошо.\n\n"
-        "PRO уже активен. "
-        "К настройке целей и привычек "
-        "можно вернуться позже."
-    )
+    if not state:
+        await start_pro_setup(update, context)
+        return
+
+    stage = state.get("stage")
+
+    if stage == "goals":
+        await show_goals_stage(update, context)
+    elif stage == "new_habits":
+        await show_new_habits_stage(update, context)
+    else:
+        await show_current_habit(update, context)
 
 
 # =========================================================

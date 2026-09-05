@@ -1,0 +1,37 @@
+BLOCK 8 — PRO activation + PRO weekly report + callback consistency
+
+Replace the files from this ZIP in the project, preserving the folders.
+
+Critical fixes:
+1. Fixed handlers/pro.py duplicate test_activate_pro and missing has_frozen_pro_data import.
+2. Added has_frozen_pro_data() to services/subscription.py.
+3. PRO activation now distinguishes first activation from returning PRO.
+4. Returning PRO restores frozen habits/goals and does not restart PRO Setup.
+5. PRO Setup completion is now persisted in subscriptions.pro_setup_completed.
+6. Removed the visible "Сделать позже" button from PRO Setup; old callback remains compatible and does not mark setup complete.
+7. Fixed habit frequency callback double-answer flow and return to the same habit card.
+8. Fixed missing difficulty_label() in PRO habit editing.
+9. Reworked PRO weekly report: date, 4-week trends, check-in/habit insights, next-week Dan focus, and a polished radar chart with an info panel.
+10. /reporttest previews the last completed week; /reporttest_current previews Monday-to-today. Current preview is not saved as a historical weekly report.
+11. Removed UTF-8 BOM from services/weekly_report.py.
+
+After replacement:
+python main.py
+
+First test:
+⭐ PRO -> Подключить PRO -> ⭐ Подключить PRO
+
+Expected:
+- no ImportError
+- PRO becomes active
+- first activation opens PRO Setup
+- after Setup completion, subscriptions.pro_setup_completed = 1
+
+Then:
+- expire PRO using existing test flow
+- open PRO again
+- activate PRO
+- frozen items restore automatically without repeating Setup
+
+Do NOT delete .env or .git.
+Do NOT delete dan.db unless you intentionally want a fresh test user.

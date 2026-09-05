@@ -78,10 +78,7 @@ from handlers.habit_review import (
     habit_review_callback,
 )
 
-from handlers.progress.test_report import (
-    test_weekly_report,
-    test_weekly_report_current,
-)
+from handlers.progress.test_report import test_weekly_report
 
 from handlers.feedback import (
     handle_feedback_message,
@@ -98,8 +95,6 @@ from handlers.goal.edit_goal import (
 )
 
 from database.connection import get_connection
-
-from services.pro_test_reset import reset_pro_for_test
 
 
 from handlers.pro_setup import (
@@ -292,42 +287,6 @@ def main():
         )
 
         # =====================================================
-    # /PRO_RESET — ТЕСТОВОЕ ИСТЕЧЕНИЕ PRO
-    # =====================================================
-
-    async def pro_reset(
-        update: Update,
-        context: ContextTypes.DEFAULT_TYPE
-    ):
-
-        user_id = update.effective_user.id
-
-        try:
-            result = reset_pro_for_test(user_id)
-
-            await update.message.reply_text(
-                "🧪 <b>PRO переведён в FREE для теста.</b>\n\n"
-                f"PRO отключён: {'да' if result['pro_disabled'] else 'нет'}\n"
-                f"🟢 Активных привычек: {result['habits_active']}\n"
-                f"🔒 Замороженных привычек: {result['habits_frozen']}\n"
-                f"🎯 Активных целей: {result['goals_active']}\n"
-                f"🔒 Замороженных целей: {result['goals_frozen']}\n\n"
-                "Ничего не удалено. Теперь проверь FREE-состояние, "
-                "а затем повторно активируй PRO.",
-                parse_mode="HTML"
-            )
-
-        except Exception as error:
-            logger.exception("PRO RESET TEST ERROR")
-
-            await update.message.reply_text(
-                "❌ Не удалось перевести PRO в тестовый FREE.\n\n"
-                f"Ошибка: {error}"
-            )
-
-
-    
-    # =====================================================
     # /DEBUG_HABITS
     # =====================================================
 
@@ -349,8 +308,7 @@ def main():
                 habit_type,
                 frequency,
                 schedule_days,
-                active,
-                pro_status
+                active
             FROM habits
             WHERE user_id = ?
             ORDER BY id
@@ -385,7 +343,6 @@ def main():
             frequency = habit[3]
             schedule_days = habit[4]
             active = habit[5]
-            pro_status = habit[6]
 
             icon = (
                 "🟢"
@@ -399,14 +356,6 @@ def main():
                 else "УДАЛЕНА"
             )
 
-            pro_status_text = (
-                "🟢 ACTIVE"
-                if pro_status == "active"
-                else "🔒 FROZEN"
-                if pro_status == "frozen"
-                else str(pro_status or "—")
-            )
-
             lines.append(
                 f"{icon} <b>ID {habit_id}</b>\n"
                 f"Название: {name}\n"
@@ -414,15 +363,12 @@ def main():
                 f"Периодичность: {frequency}\n"
                 f"Дни: {schedule_days or '—'}\n"
                 f"Статус: <b>{active_text}</b>\n"
-                f"PRO-статус: <b>{pro_status_text}</b>\n"
             )
 
         await update.message.reply_text(
             "\n".join(lines),
             parse_mode="HTML"
         )
-
-
 
     # =====================================================
     # /START
@@ -446,18 +392,6 @@ def main():
             reset_test
         )
     )
-
-    # =====================================================
-    # /PRO_RESET
-    # =====================================================
-
-    app.add_handler(
-        CommandHandler(
-            "pro_reset",
-            pro_reset
-        )
-    )
-
 
     # =====================================================
     # /DEBUG_HABITS
@@ -949,12 +883,6 @@ def main():
         CommandHandler(
             "reporttest",
             test_weekly_report
-        )
-    )
-    app.add_handler(
-        CommandHandler(
-            "reporttest_current",
-            test_weekly_report_current
         )
     )
 

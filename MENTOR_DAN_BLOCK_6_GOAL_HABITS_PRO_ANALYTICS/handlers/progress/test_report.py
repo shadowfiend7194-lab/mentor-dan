@@ -1,0 +1,20 @@
+from telegram import Update
+from telegram.ext import ContextTypes
+
+from services.subscription import user_has_pro
+from services.dan.pro_weekly_report import build_weekly_report
+from database.weekly_reports import save_weekly_report
+
+
+async def test_weekly_report(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    if not user_has_pro(user_id):
+        await update.message.reply_text("⭐ Тест расширенного отчёта доступен только в PRO.")
+        return
+
+    text, chart = build_weekly_report(user_id)
+    if text:
+        save_weekly_report(user_id, text)
+    if chart:
+        await update.message.reply_photo(photo=chart)
+    await update.message.reply_text(text or "Недостаточно данных.", parse_mode="HTML")

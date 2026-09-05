@@ -8,25 +8,30 @@ from services.subscription import is_pro
 # PROGRESS / PRO
 # =========================================================
 #
-# Главная задача файла:
+# ЕДИНАЯ МАТЕМАТИКА PRO
 #
 # привычка
 #   ↓
 # выполнение
 #   ↓
-# сырая стабильность
+# стабильность
+#   ↓
+# свежесть результата
 #   ↓
 # поправка на сложность
 #   ↓
-# прогресс формирования привычки
+# прогресс формирования
 #   ↓
-# привычки, связанные с целью
+# привычки → цель
 #   ↓
 # прогресс цели
 #
 # ВАЖНО:
-# этот файл ничего не меняет в БД.
-# Он только рассчитывает показатели.
+#
+# 1. Никаких новых таблиц для стабильности нет.
+# 2. Никакие показатели не записываются в БД.
+# 3. Всё считается на основе существующих habit_logs.
+# 4. FREE этот файл вообще не использует.
 #
 # =========================================================
 
@@ -35,23 +40,27 @@ from services.subscription import is_pro
 # НАСТРОЙКИ МОДЕЛИ
 # =========================================================
 
-# Минимальный срок, после которого вообще можно
-# говорить о формировании привычки.
+# ---------------------------------------------------------
+# ОКНО СВЕЖЕСТИ
+# ---------------------------------------------------------
 #
-# 21 день — ранняя контрольная точка,
-# а НЕ автоматическое формирование.
-MIN_HABIT_FORMATION_DAYS = 21
+# Последние 14 дней имеют больший вес.
+#
+# Это нужно, чтобы старые ошибки не тянулись
+# за человеком бесконечно.
+#
+RECENT_WINDOW_DAYS = 14
+
+# 70% — свежая динамика
+# 30% — вся история
+RECENT_STABILITY_WEIGHT = 0.70
+ALL_TIME_STABILITY_WEIGHT = 0.30
 
 
-# Чем сложнее привычка, тем дольше нужен период,
-# чтобы считать её действительно сформированной.
-#
-# 1 — очень легко
-# 2 — легко
-# 3 — средне
-# 4 — сложно
-# 5 — очень сложно
-#
+# ---------------------------------------------------------
+# ФОРМИРОВАНИЕ ПРИВЫЧКИ
+# ---------------------------------------------------------
+
 FORMATION_DAYS_BY_DIFFICULTY = {
     1: 21,
     2: 28,
@@ -61,14 +70,12 @@ FORMATION_DAYS_BY_DIFFICULTY = {
 }
 
 
-# Минимальная стабильность,
-# необходимая для формирования привычки.
+# ---------------------------------------------------------
+# ТРЕБУЕМАЯ СТАБИЛЬНОСТЬ
+# ---------------------------------------------------------
 #
-# Лёгкая привычка:
-# почти идеальная стабильность.
-#
-# Сложная привычка:
-# достаточно более низкой стабильности.
+# Сложная привычка не требует такой же идеальности,
+# как очень простая.
 #
 STABILITY_TARGET_BY_DIFFICULTY = {
     1: 90,
@@ -79,41 +86,66 @@ STABILITY_TARGET_BY_DIFFICULTY = {
 }
 
 
-# Для цели используем более длинный горизонт.
+# ---------------------------------------------------------
+# ВЕС СЛОЖНОСТИ ДЛЯ ЦЕЛИ
+# ---------------------------------------------------------
 #
-# 45 дней — минимальный ориентир,
+# Это НЕ основной показатель сложности.
+#
+# Основная поправка уже используется внутри
+# стабильности привычки.
+#
+# Здесь вес нужен только для объединения
+# нескольких привычек одной цели.
+#
+DIFFICULTY_WEIGHT_BY_LEVEL = {
+    1: 0.90,
+    2: 0.95,
+    3: 1.00,
+    4: 1.05,
+    5: 1.10,
+}
+
+
+# ---------------------------------------------------------
+# ЦЕЛЬ
+# ---------------------------------------------------------
+#
+# 45 дней — минимальный срок,
 # после которого цель вообще может перейти
 # в состояние "готова к проверке".
+#
 GOAL_MIN_DAYS = 45
 
-
-# Минимальная стабильность связанных привычек,
-# чтобы предложить проверить достижение цели.
+# Средняя стабильность связанных привычек.
 GOAL_STABILITY_TARGET = 75
 
 
 # =========================================================
-# ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
+# НОРМАЛИЗАЦИЯ СЛОЖНОСТИ
 # =========================================================
 
 def normalize_difficulty(
     difficulty,
 ):
     """
-    Приводит difficulty к диапазону 1–5.
+    Приводит сложность к диапазону 1–5.
 
     Если значение отсутствует,
-    используем среднюю сложность = 3.
+    используется средняя сложность = 3.
     """
 
     try:
+
         difficulty = int(
             difficulty
         )
+
     except (
         TypeError,
         ValueError,
     ):
+
         return 3
 
     return max(
@@ -125,12 +157,15 @@ def normalize_difficulty(
     )
 
 
+# =========================================================
+# ДАТА СОЗДАНИЯ
+# =========================================================
+
 def parse_created_date(
     created_at,
 ):
     """
-    Преобразует created_at привычки
-    в date.
+    Преобразует created_at в date.
     """
 
     if not created_at:
@@ -160,16 +195,21 @@ def parse_created_date(
             ).date()
 
         except ValueError:
+
             continue
 
     return None
 
 
+# =========================================================
+# СРЕДНЕЕ
+# =========================================================
+
 def calculate_average(
     values,
 ):
     """
-    Среднее значение.
+    Безопасное среднее значение.
     """
 
     values = [
@@ -189,21 +229,20 @@ def calculate_average(
 
 
 # =========================================================
-# ЦЕЛЬ ПО СЛОЖНОСТИ
+# СРОК ФОРМИРОВАНИЯ
 # =========================================================
 
 def get_formation_days(
     difficulty,
 ):
     """
-    Сколько дней нужно для полноценной оценки
-    формирования привычки.
+    Возвращает ориентировочный срок формирования.
 
-    1 → 21
-    2 → 28
-    3 → 35
-    4 → 45
-    5 → 60
+    1 → 21 день
+    2 → 28 дней
+    3 → 35 дней
+    4 → 45 дней
+    5 → 60 дней
     """
 
     difficulty = normalize_difficulty(
@@ -215,12 +254,15 @@ def get_formation_days(
     ]
 
 
+# =========================================================
+# ЦЕЛЕВАЯ СТАБИЛЬНОСТЬ
+# =========================================================
+
 def get_stability_target(
     difficulty,
 ):
     """
-    Какую стабильность считаем хорошей
-    для конкретной сложности.
+    Возвращает требуемую стабильность.
 
     1 → 90%
     2 → 85%
@@ -239,7 +281,28 @@ def get_stability_target(
 
 
 # =========================================================
-# ПОЛУЧИТЬ ЛОГИ ПРИВЫЧКИ
+# ВЕС СЛОЖНОСТИ
+# =========================================================
+
+def get_difficulty_weight(
+    difficulty,
+):
+    """
+    Небольшой вес сложности для объединения
+    нескольких привычек в одну цель.
+    """
+
+    difficulty = normalize_difficulty(
+        difficulty
+    )
+
+    return DIFFICULTY_WEIGHT_BY_LEVEL[
+        difficulty
+    ]
+
+
+# =========================================================
+# ПОЛУЧИТЬ ЛОГИ
 # =========================================================
 
 def get_habit_logs(
@@ -278,7 +341,9 @@ def get_habit_logs(
     conn.close()
 
     return {
-        row[0]: bool(row[1])
+        row[0]: bool(
+            row[1]
+        )
         for row in rows
     }
 
@@ -293,7 +358,7 @@ def get_habit(
 ):
     """
     Получает активную привычку пользователя
-    со всеми PRO-полями.
+    со всеми существующими PRO-полями.
     """
 
     conn = get_connection()
@@ -343,20 +408,27 @@ def get_habit(
         "frequency": row[3],
         "schedule_days": row[4],
         "created_at": row[5],
-        "formed": bool(row[6]),
+        "formed": bool(
+            row[6]
+        ),
         "formed_at": row[7],
         "last_review_date": row[8],
-        "controlled": bool(row[9]),
+        "controlled": bool(
+            row[9]
+        ),
         "controlled_at": row[10],
         "difficulty": row[11],
         "motivation": row[12],
         "goal_id": row[13],
-        "pro_status": row[14] or "active",
+        "pro_status": (
+            row[14]
+            or "active"
+        ),
     }
 
 
 # =========================================================
-# ПРОВЕРКА ДНЯ ПРИВЫЧКИ
+# РАСПИСАНИЕ ПРИВЫЧКИ
 # =========================================================
 
 def is_habit_scheduled_on_date(
@@ -364,11 +436,8 @@ def is_habit_scheduled_on_date(
     check_date,
 ):
     """
-    Определяет, должна ли привычка
+    Проверяет, должна ли привычка
     выполняться в конкретный день.
-
-    Форматы полностью соответствуют
-    текущей системе habits.py.
     """
 
     weekday = check_date.weekday()
@@ -416,81 +485,39 @@ def is_habit_scheduled_on_date(
 
 
 # =========================================================
-# СТАТИСТИКА ПРИВЫЧКИ
+# РАСЧЁТ СТАБИЛЬНОСТИ ПЕРИОДА
 # =========================================================
 
-def calculate_habit_statistics(
+def _calculate_period_stability(
     habit,
-    today=None,
+    logs,
+    start_date,
+    end_date,
 ):
     """
-    Рассчитывает всю базовую статистику
-    одной привычки с момента её создания.
+    Считает обычную стабильность за период.
 
-    Возвращает:
+    Для good:
+        выполнено / запланировано
 
-    - scheduled
-    - completed
-    - missed
-    - pending
-    - raw_stability
-    - difficulty
-    - target_stability
-    - adjusted_stability
-    - formation_days
-    - elapsed_days
-    - formation_progress
-    - formation_ready
+    Для bad:
+        удержался / запланировано
+
+    В текущей системе habit_logs.completed = 1
+    означает желаемое поведение.
+    Поэтому одна формула подходит обоим типам.
     """
-
-    if today is None:
-        today = date.today()
-
-    created_date = parse_created_date(
-        habit.get("created_at")
-    )
-
-    if not created_date:
-
-        return {
-            "scheduled": 0,
-            "completed": 0,
-            "missed": 0,
-            "pending": 0,
-            "raw_stability": 0,
-            "difficulty": normalize_difficulty(
-                habit.get("difficulty")
-            ),
-            "target_stability": get_stability_target(
-                habit.get("difficulty")
-            ),
-            "adjusted_stability": 0,
-            "formation_days": get_formation_days(
-                habit.get("difficulty")
-            ),
-            "elapsed_days": 0,
-            "formation_progress": 0,
-            "formation_ready": False,
-        }
-
-    if created_date > today:
-
-        created_date = today
-
-    logs = get_habit_logs(
-        habit["id"],
-        created_date,
-        today,
-    )
 
     scheduled = 0
     completed = 0
     missed = 0
     pending = 0
 
-    current = created_date
+    current = start_date
 
-    while current <= today:
+    today = date.today()
+
+    while current <= end_date:
 
         if is_habit_scheduled_on_date(
             habit,
@@ -513,16 +540,12 @@ def calculate_habit_statistics(
 
             else:
 
-                # Сегодня ещё может быть
-                # не завершённый день.
                 if current == today:
 
                     pending += 1
 
                 else:
 
-                    # Старый день без лога
-                    # считаем пропущенным.
                     missed += 1
 
         current += timedelta(
@@ -536,7 +559,7 @@ def calculate_habit_statistics(
 
     if elapsed_scheduled > 0:
 
-        raw_stability = round(
+        stability = round(
             completed
             / elapsed_scheduled
             * 100,
@@ -545,52 +568,225 @@ def calculate_habit_statistics(
 
     else:
 
-        raw_stability = 0
+        stability = 0
+
+    return {
+        "scheduled": scheduled,
+        "completed": completed,
+        "missed": missed,
+        "pending": pending,
+        "elapsed_scheduled": (
+            elapsed_scheduled
+        ),
+        "stability": stability,
+    }
+
+
+# =========================================================
+# СТАТУС ПРИВЫЧКИ
+# =========================================================
+
+def get_formation_stage(
+    formation_progress,
+):
+    """
+    Производный статус привычки.
+
+    Это пока НЕ записывается в БД.
+
+    Позже эти статусы можно использовать
+    для визуальной геймификации.
+    """
+
+    try:
+
+        progress = float(
+            formation_progress
+        )
+
+    except (
+        TypeError,
+        ValueError,
+    ):
+
+        progress = 0
+
+    if progress < 30:
+
+        return "Зарождение"
+
+    if progress < 70:
+
+        return "Формирование"
+
+    if progress < 90:
+
+        return "Устойчивая"
+
+    return "Сформирована"
+
+
+# =========================================================
+# СТАТИСТИКА ПРИВЫЧКИ
+# =========================================================
+
+def calculate_habit_statistics(
+    habit,
+    today=None,
+):
+    """
+    Главная математическая функция PRO.
+
+    Возвращает:
+
+    - raw_stability
+    - recent_stability
+    - adjusted_stability
+    - difficulty
+    - target_stability
+    - formation_progress
+    - formation_stage
+    - formation_ready
+
+    Сложность действительно влияет
+    на итоговый показатель.
+    """
+
+    if today is None:
+
+        today = date.today()
+
+    created_date = parse_created_date(
+        habit.get("created_at")
+    )
 
     difficulty = normalize_difficulty(
         habit.get("difficulty")
     )
 
-    target_stability = (
-        get_stability_target(
-            difficulty
-        )
+    target_stability = get_stability_target(
+        difficulty
     )
 
-    formation_days = (
-        get_formation_days(
-            difficulty
-        )
+    formation_days = get_formation_days(
+        difficulty
     )
 
-    elapsed_days = (
-        today
-        - created_date
-    ).days + 1
+    if not created_date:
+
+        return {
+            "scheduled": 0,
+            "completed": 0,
+            "missed": 0,
+            "pending": 0,
+            "elapsed_scheduled": 0,
+            "raw_stability": 0,
+            "recent_stability": 0,
+            "adjusted_stability": 0,
+            "difficulty": difficulty,
+            "target_stability": target_stability,
+            "formation_days": formation_days,
+            "elapsed_days": 0,
+            "time_progress": 0,
+            "formation_progress": 0,
+            "formation_stage": "Зарождение",
+            "formation_ready": False,
+            "formed": bool(
+                habit.get("formed")
+            ),
+        }
+
+    if created_date > today:
+
+        created_date = today
 
     # -----------------------------------------------------
-    # СТАБИЛЬНОСТЬ С УЧЁТОМ СЛОЖНОСТИ
+    # ВСЯ ИСТОРИЯ
+    # -----------------------------------------------------
+
+    logs = get_habit_logs(
+        habit["id"],
+        created_date,
+        today,
+    )
+
+    all_time = _calculate_period_stability(
+        habit,
+        logs,
+        created_date,
+        today,
+    )
+
+    # -----------------------------------------------------
+    # ПОСЛЕДНИЕ 14 ДНЕЙ
+    # -----------------------------------------------------
+
+    recent_start = max(
+        created_date,
+        today - timedelta(
+            days=RECENT_WINDOW_DAYS - 1
+        ),
+    )
+
+    recent = _calculate_period_stability(
+        habit,
+        logs,
+        recent_start,
+        today,
+    )
+
+    # -----------------------------------------------------
+    # СТАБИЛЬНОСТЬ
     # -----------------------------------------------------
     #
-    # Принцип:
+    # 70% — последние 14 дней
+    # 30% — вся история
     #
-    # если лёгкая привычка требует 90%,
-    # то 70% = слабый результат.
-    #
-    # если сложная привычка требует 65%,
-    # то 70% = уже хороший результат.
-    #
-    # Поэтому нормализуем фактическую стабильность
-    # относительно индивидуального target.
+    # Это делает показатель живым.
+    # -----------------------------------------------------
+
+    if (
+        recent["elapsed_scheduled"] > 0
+        and all_time["elapsed_scheduled"] > 0
+    ):
+
+        raw_stability = round(
+            (
+                recent["stability"]
+                * RECENT_STABILITY_WEIGHT
+            )
+            +
+            (
+                all_time["stability"]
+                * ALL_TIME_STABILITY_WEIGHT
+            ),
+            1,
+        )
+
+    elif all_time["elapsed_scheduled"] > 0:
+
+        raw_stability = (
+            all_time["stability"]
+        )
+
+    else:
+
+        raw_stability = 0
+
+    # -----------------------------------------------------
+    # ПОПРАВКА НА СЛОЖНОСТЬ
+    # -----------------------------------------------------
     #
     # Например:
     #
-    # difficulty 1:
-    # 70 / 90 * 100 = 77.8
+    # сложность 1 → target 90%
+    # сложность 5 → target 65%
     #
-    # difficulty 5:
-    # 70 / 65 * 100 = 107.7 → максимум 100
+    # Поэтому 75% для сложной привычки
+    # будет сильнее выглядеть, чем 75%
+    # для очень лёгкой.
     #
+    # Итог ограничен 100%.
     # -----------------------------------------------------
 
     if target_stability > 0:
@@ -612,77 +808,115 @@ def calculate_habit_statistics(
         adjusted_stability = 0
 
     # -----------------------------------------------------
-    # ПРОГРЕСС ФОРМИРОВАНИЯ
-    # -----------------------------------------------------
-    #
-    # Смотрим одновременно:
-    #
-    # 1. сколько прошло времени;
-    # 2. насколько стабильно выполняется привычка.
-    #
-    # Поэтому нельзя получить 100%
-    # просто просидев нужное количество дней.
-    #
+    # ВРЕМЯ
     # -----------------------------------------------------
 
-    time_progress = (
-        elapsed_days
-        / formation_days
-        * 100
-    )
+    elapsed_days = (
+        today
+        - created_date
+    ).days + 1
 
-    time_progress = min(
-        100,
-        time_progress,
-    )
-
-    formation_progress = round(
-        (
-            time_progress
-            * 0.4
-        )
-        +
-        (
-            adjusted_stability
-            * 0.6
+    time_progress = round(
+        min(
+            100,
+            elapsed_days
+            / formation_days
+            * 100,
         ),
         1,
     )
 
     # -----------------------------------------------------
-    # ГОТОВНОСТЬ ПРИВЫЧКИ
+    # ПРОГРЕСС ФОРМИРОВАНИЯ
+    # -----------------------------------------------------
+    #
+    # 40% — время
+    # 60% — стабильность
+    #
+    # -----------------------------------------------------
+
+    formation_progress = round(
+        (
+            time_progress
+            * 0.40
+        )
+        +
+        (
+            adjusted_stability
+            * 0.60
+        ),
+        1,
+    )
+
+    # -----------------------------------------------------
+    # ГОТОВНОСТЬ
+    # -----------------------------------------------------
+    #
+    # Нельзя получить статус сформированной
+    # просто из-за большого количества дней.
+    #
+    # Нужно:
+    #
+    # 1. пройти индивидуальный срок;
+    # 2. иметь достаточную фактическую стабильность.
+    #
     # -----------------------------------------------------
 
     formation_ready = (
         elapsed_days
         >= formation_days
-        and elapsed_scheduled >= (
-            min(
-                formation_days,
-                21,
-            )
+        and all_time["elapsed_scheduled"]
+        >= min(
+            formation_days,
+            21,
         )
         and raw_stability
         >= target_stability
     )
 
+    # Если математически привычка уже готова,
+    # её производный статус должен быть
+    # "Сформирована".
+    #
+    # Но ручное поле formed остаётся
+    # отдельным подтверждением пользователя.
+
+    formation_stage = get_formation_stage(
+        formation_progress
+    )
+
+    if formation_ready:
+
+        formation_stage = "Сформирована"
+
     return {
-        "scheduled": scheduled,
-        "completed": completed,
-        "missed": missed,
-        "pending": pending,
-        "elapsed_scheduled": elapsed_scheduled,
+        "scheduled": all_time[
+            "scheduled"
+        ],
+        "completed": all_time[
+            "completed"
+        ],
+        "missed": all_time[
+            "missed"
+        ],
+        "pending": all_time[
+            "pending"
+        ],
+        "elapsed_scheduled": all_time[
+            "elapsed_scheduled"
+        ],
         "raw_stability": raw_stability,
+        "recent_stability": recent[
+            "stability"
+        ],
         "difficulty": difficulty,
         "target_stability": target_stability,
         "adjusted_stability": adjusted_stability,
         "formation_days": formation_days,
         "elapsed_days": elapsed_days,
-        "time_progress": round(
-            time_progress,
-            1,
-        ),
+        "time_progress": time_progress,
         "formation_progress": formation_progress,
+        "formation_stage": formation_stage,
         "formation_ready": formation_ready,
         "formed": bool(
             habit.get("formed")
@@ -703,6 +937,7 @@ def get_habit_progress(
     """
 
     if not is_pro(user_id):
+
         return {}
 
     habit = get_habit(
@@ -711,12 +946,11 @@ def get_habit_progress(
     )
 
     if not habit:
+
         return {}
 
-    statistics = (
-        calculate_habit_statistics(
-            habit
-        )
+    statistics = calculate_habit_statistics(
+        habit
     )
 
     return {
@@ -747,6 +981,9 @@ def get_habit_progress(
         "raw_stability": statistics[
             "raw_stability"
         ],
+        "recent_stability": statistics[
+            "recent_stability"
+        ],
         "adjusted_stability": statistics[
             "adjusted_stability"
         ],
@@ -762,28 +999,34 @@ def get_habit_progress(
         "formation_progress": statistics[
             "formation_progress"
         ],
+        "formation_stage": statistics[
+            "formation_stage"
+        ],
         "formation_ready": statistics[
             "formation_ready"
         ],
         "formed": statistics[
             "formed"
         ],
+        "difficulty_weight": get_difficulty_weight(
+            statistics["difficulty"]
+        ),
     }
 
 
 # =========================================================
-# ВСЕ PRO-ПРИВЫЧКИ
+# ВСЕ ПРИВЫЧКИ
 # =========================================================
 
 def get_all_habits_progress(
     user_id,
 ):
     """
-    Возвращает PRO-прогресс
-    всех активных привычек пользователя.
+    PRO-прогресс всех активных привычек.
     """
 
     if not is_pro(user_id):
+
         return []
 
     conn = get_connection()
@@ -826,7 +1069,7 @@ def get_all_habits_progress(
 
 
 # =========================================================
-# ПРИВЫЧКИ КОНКРЕТНОЙ ЦЕЛИ
+# ПРИВЫЧКИ ЦЕЛИ
 # =========================================================
 
 def get_goal_habits(
@@ -834,11 +1077,12 @@ def get_goal_habits(
     goal_id,
 ):
     """
-    Возвращает только те привычки,
-    которые связаны с указанной целью.
+    Возвращает привычки,
+    связанные с конкретной целью.
     """
 
     if not is_pro(user_id):
+
         return []
 
     habits = get_all_habits_progress(
@@ -848,41 +1092,21 @@ def get_goal_habits(
     return [
         habit
         for habit in habits
-        if habit.get(
-            "goal_id"
-        ) == goal_id
+        if habit.get("goal_id") == goal_id
     ]
 
 
 # =========================================================
-# ПРОГРЕСС ЦЕЛИ
+# ПОЛУЧИТЬ ЦЕЛЬ
 # =========================================================
 
-def calculate_goal_progress(
+def _get_goal(
     user_id,
     goal_id,
 ):
     """
-    Рассчитывает PRO-прогресс цели.
-
-    Логика:
-
-    1. Берём только связанные привычки.
-    2. У каждой привычки уже есть
-       стабильность с учётом сложности.
-    3. Объединяем их.
-    4. Проверяем срок работы над целью.
-    5. Определяем готовность к проверке цели.
-
+    Получает активную цель.
     """
-
-    if not is_pro(user_id):
-        return {}
-
-    habits = get_goal_habits(
-        user_id,
-        goal_id,
-    )
 
     conn = get_connection()
     cursor = conn.cursor()
@@ -912,18 +1136,60 @@ def calculate_goal_progress(
     conn.close()
 
     if not row:
-        return {}
 
-    goal = {
+        return None
+
+    return {
         "id": row[0],
         "title": row[1],
-        "status": row[2] or "active",
+        "status": (
+            row[2]
+            or "active"
+        ),
         "created_at": row[3],
         "achieved_at": row[4],
     }
 
+
+# =========================================================
+# ПРОГРЕСС ЦЕЛИ
+# =========================================================
+
+def calculate_goal_progress(
+    user_id,
+    goal_id,
+):
+    """
+    Рассчитывает PRO-прогресс цели.
+
+    Несколько привычек одной цели
+    объединяются через взвешенное среднее.
+
+    Вес зависит от сложности привычки,
+    поэтому сложность реально участвует
+    в математике цели.
+    """
+
+    if not is_pro(user_id):
+
+        return {}
+
+    goal = _get_goal(
+        user_id,
+        goal_id,
+    )
+
+    if not goal:
+
+        return {}
+
+    habits = get_goal_habits(
+        user_id,
+        goal_id,
+    )
+
     # -----------------------------------------------------
-    # НЕТ ПРИВЯЗАННЫХ ПРИВЫЧЕК
+    # НЕТ ПРИВЫЧЕК
     # -----------------------------------------------------
 
     if not habits:
@@ -935,6 +1201,7 @@ def calculate_goal_progress(
             "average_stability": 0,
             "goal_progress": 0,
             "elapsed_days": 0,
+            "time_progress": 0,
             "goal_ready": False,
             "reason": (
                 "Нет привычек, связанных с целью."
@@ -942,31 +1209,58 @@ def calculate_goal_progress(
         }
 
     # -----------------------------------------------------
-    # СТАБИЛЬНОСТЬ ПРИВЫЧЕК
-    # -----------------------------------------------------
-
-    stability_values = [
-        habit["adjusted_stability"]
-        for habit in habits
-    ]
-
-    average_stability = round(
-        sum(stability_values)
-        / len(stability_values),
-        1,
-    )
-
-    # -----------------------------------------------------
-    # ДАТА НАЧАЛА ЦЕЛИ
+    # ВЗВЕШЕННАЯ СТАБИЛЬНОСТЬ
     # -----------------------------------------------------
     #
-    # Цель сама по себе создана раньше или позже
-    # привычек.
+    # Например:
     #
-    # Поэтому берём самую раннюю дату:
+    # привычка 1 → 90%, вес 1.10
+    # привычка 2 → 70%, вес 0.95
+    # привычка 3 → 80%, вес 1.05
     #
-    # goal.created_at
-    #
+    # Это лучше простого среднего.
+    # -----------------------------------------------------
+
+    weighted_sum = 0
+    total_weight = 0
+
+    for habit in habits:
+
+        stability = float(
+            habit.get(
+                "adjusted_stability",
+                0,
+            )
+        )
+
+        weight = float(
+            habit.get(
+                "difficulty_weight",
+                1.0,
+            )
+        )
+
+        weighted_sum += (
+            stability
+            * weight
+        )
+
+        total_weight += weight
+
+    if total_weight > 0:
+
+        average_stability = round(
+            weighted_sum
+            / total_weight,
+            1,
+        )
+
+    else:
+
+        average_stability = 0
+
+    # -----------------------------------------------------
+    # ВРЕМЯ ЦЕЛИ
     # -----------------------------------------------------
 
     created_date = parse_created_date(
@@ -986,10 +1280,6 @@ def calculate_goal_progress(
 
         elapsed_days = 0
 
-    # -----------------------------------------------------
-    # ВРЕМЕННОЙ ПРОГРЕСС
-    # -----------------------------------------------------
-
     time_progress = round(
         min(
             100,
@@ -1001,24 +1291,17 @@ def calculate_goal_progress(
     )
 
     # -----------------------------------------------------
-    # ИТОГОВЫЙ ПРОГРЕСС ЦЕЛИ
+    # ИТОГОВЫЙ ПРОГРЕСС
     # -----------------------------------------------------
     #
-    # 35% — стабильность привычек
-    # 65% — фактическая стабильность.
-    #
-    # Важнее именно стабильность,
-    # а не просто количество дней.
+    # 75% — стабильность поведения
+    # 25% — время работы над целью
     #
     # -----------------------------------------------------
-
-    stability_progress = (
-        average_stability
-    )
 
     goal_progress = round(
         (
-            stability_progress
+            average_stability
             * 0.75
         )
         +
@@ -1030,19 +1313,20 @@ def calculate_goal_progress(
     )
 
     # -----------------------------------------------------
-    # ГОТОВНОСТЬ ЦЕЛИ К ПРОВЕРКЕ
+    # ГОТОВНОСТЬ ЦЕЛИ
     # -----------------------------------------------------
     #
-    # Нужно одновременно:
+    # Нужно:
     #
     # 1. минимум 45 дней;
-    # 2. средняя adjusted stability >= 75%;
-    # 3. есть хотя бы одна связанная привычка;
+    # 2. средняя стабильность >= 75%;
+    # 3. хотя бы одна связанная привычка.
     #
-    # Тогда можно спрашивать пользователя:
+    # Это НЕ означает автоматическое достижение.
     #
-    # "Похоже, ты уже достаточно продвинулся.
-    # Давай проверим результат."
+    # Это означает:
+    #
+    # "Дэн считает, что уже пора спросить пользователя".
     #
     # -----------------------------------------------------
 
@@ -1089,11 +1373,12 @@ def get_all_goals_progress(
     user_id,
 ):
     """
-    Возвращает PRO-прогресс
-    всех активных целей.
+    Возвращает PRO-прогресс всех
+    активных целей.
     """
 
     if not is_pro(user_id):
+
         return []
 
     conn = get_connection()
@@ -1137,21 +1422,19 @@ def get_all_goals_progress(
 
 
 # =========================================================
-# СРЕДНЯЯ СТАБИЛЬНОСТЬ ВСЕХ ПРИВЫЧЕК
+# СРЕДНЯЯ СТАБИЛЬНОСТЬ
 # =========================================================
 
 def get_average_habit_stability(
     user_id,
 ):
     """
-    Средняя adjusted stability
-    всех активных привычек пользователя.
-
-    Это значение удобно использовать
-    в недельном PRO-отчёте.
+    Средняя PRO-стабильность
+    всех активных привычек.
     """
 
     if not is_pro(user_id):
+
         return 0
 
     habits = get_all_habits_progress(
@@ -1159,10 +1442,14 @@ def get_average_habit_stability(
     )
 
     if not habits:
+
         return 0
 
     values = [
-        habit["adjusted_stability"]
+        habit.get(
+            "adjusted_stability",
+            0,
+        )
         for habit in habits
     ]
 
@@ -1183,11 +1470,12 @@ def get_pro_progress_summary(
     """
     Общая PRO-сводка.
 
-    Её дальше можно напрямую использовать
-    в недельном отчёте.
+    Используется недельным отчётом
+    и другими аналитическими функциями.
     """
 
     if not is_pro(user_id):
+
         return {}
 
     habits = get_all_habits_progress(

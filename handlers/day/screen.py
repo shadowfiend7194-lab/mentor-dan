@@ -13,6 +13,8 @@ from database.habits import (
     is_habit_scheduled_today,
 )
 
+from services.subscription import get_user_plan
+
 
 # =========================================================
 # ЭКРАН «МОЙ ДЕНЬ»
@@ -25,14 +27,28 @@ async def show_day(
 
     user_id = update.effective_user.id
 
+    plan = get_user_plan(user_id)
 
-    habits = get_user_habits(
-        user_id
+    all_habits = get_user_habits(user_id)
+
+    frozen_count = sum(
+        1
+        for habit in all_habits
+        if habit.get("pro_status") == "frozen"
     )
+
+    if plan == "pro":
+        available_habits = all_habits
+    else:
+        available_habits = [
+            habit
+            for habit in all_habits
+            if habit.get("pro_status") != "frozen"
+        ]
 
     habits = [
         habit
-        for habit in get_user_habits(user_id)
+        for habit in available_habits
         if is_habit_scheduled_today(habit)
     ]
 
@@ -260,6 +276,12 @@ async def show_day(
 
         "🔴 Нежелательная — нажми, если удержался."
     )
+
+    if plan == "pro_expired" and frozen_count:
+        text += (
+            "\n\n🔒 <b>Заморожено после окончания PRO:</b> "
+            f"{frozen_count} привычк(а/и)."
+        )
 
 
 

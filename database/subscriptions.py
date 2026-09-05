@@ -4,22 +4,49 @@ from database.connection import get_connection
 
 
 # =========================================================
+# ВНУТРЕННИЕ ДАТЫ
+# =========================================================
+
+DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
+
+
+def _now():
+    return datetime.now()
+
+
+def _now_string():
+    return _now().strftime(
+        DATE_FORMAT
+    )
+
+
+def _parse_datetime(value):
+
+    if not value:
+        return None
+
+    if isinstance(value, datetime):
+        return value
+
+    try:
+        return datetime.strptime(
+            str(value),
+            DATE_FORMAT
+        )
+    except (
+        ValueError,
+        TypeError
+    ):
+        return None
+
+
+# =========================================================
 # ПОЛУЧИТЬ ПОДПИСКУ
 # =========================================================
 
-def get_subscription(user_id):
-    """
-    Возвращает текущую подписку пользователя.
-
-    Если подписки нет:
-        None
-
-    Если Pro активен:
-        status = "active"
-
-    Если Pro закончился:
-        status = "expired"
-    """
+def get_subscription(
+    user_id
+):
 
     conn = get_connection()
     cursor = conn.cursor()
@@ -34,7 +61,8 @@ def get_subscription(user_id):
             started_at,
             expires_at,
             created_at,
-            updated_at
+            updated_at,
+            pro_setup_completed
         FROM subscriptions
         WHERE user_id = ?
         LIMIT 1
@@ -47,23 +75,38 @@ def get_subscription(user_id):
     row = cursor.fetchone()
 
     if not row:
+
         conn.close()
+
         return None
 
     subscription = {
+
         "id": row[0],
+
         "user_id": row[1],
+
         "plan": row[2],
+
         "status": row[3],
+
         "started_at": row[4],
+
         "expires_at": row[5],
+
         "created_at": row[6],
+
         "updated_at": row[7],
+
+        "pro_setup_completed": bool(
+            row[8]
+        ),
+
     }
 
-    # -----------------------------------------------------
-    # АВТОМАТИЧЕСКОЕ ОПРЕДЕЛЕНИЕ ИСТЁКШЕГО PRO
-    # -----------------------------------------------------
+    # =====================================================
+    # АВТОМАТИЧЕСКОЕ ИСТЕЧЕНИЕ
+    # =====================================================
 
     if (
         subscription["plan"] == "pro"
@@ -71,42 +114,42 @@ def get_subscription(user_id):
         and subscription["expires_at"]
     ):
 
-        try:
+        expires_at = _parse_datetime(
+            subscription["expires_at"]
+        )
 
-            expires_at = datetime.strptime(
-                subscription["expires_at"],
-                "%Y-%m-%d %H:%M:%S"
+        if (
+            expires_at
+            and expires_at <= _now()
+        ):
+
+            now = _now_string()
+
+            cursor.execute(
+                """
+                UPDATE subscriptions
+
+                SET
+                    status = 'expired',
+                    updated_at = ?
+
+                WHERE user_id = ?
+
+                AND plan = 'pro'
+
+                AND status = 'active'
+                """,
+                (
+                    now,
+                    user_id,
+                )
             )
 
-            if expires_at <= datetime.now():
+            conn.commit()
 
-                now = datetime.now().strftime(
-                    "%Y-%m-%d %H:%M:%S"
-                )
+            subscription["status"] = "expired"
 
-                cursor.execute(
-                    """
-                    UPDATE subscriptions
-
-                    SET
-                        status = 'expired',
-                        updated_at = ?
-
-                    WHERE user_id = ?
-                    """,
-                    (
-                        now,
-                        user_id,
-                    )
-                )
-
-                conn.commit()
-
-                subscription["status"] = "expired"
-                subscription["updated_at"] = now
-
-        except ValueError:
-            pass
+            subscription["updated_at"] = now
 
     conn.close()
 
@@ -114,14 +157,12 @@ def get_subscription(user_id):
 
 
 # =========================================================
-# АКТИВЕН ЛИ PRO
+# PRO АКТИВЕН?
 # =========================================================
 
-def is_pro(user_id):
-    """
-    Возвращает True только если Pro реально активен
-    и срок подписки ещё не закончился.
-    """
+def is_pro(
+    user_id
+):
 
     subscription = get_subscription(
         user_id
@@ -136,48 +177,99 @@ def is_pro(user_id):
     if subscription["status"] != "active":
         return False
 
-    if not subscription["expires_at"]:
+    expires_at = _parse_datetime(
+        subscription["expires_at"]
+    )
+
+    if not expires_at:
         return False
 
-    try:
-
-        expires_at = datetime.strptime(
-            subscription["expires_at"],
-            "%Y-%m-%d %H:%M:%S"
-        )
-
-    except ValueError:
-
-        return False
-
-    return expires_at > datetime.now()
+    return expires_at > _now()
 
 
 # =========================================================
-# АКТИВИРОВАТЬ TEST PRO
+# SETUP УЖЕ БЫЛ ПРОЙДЕН?
+# =========================================================
+
+def is_pro_setup_completed(
+    user_id
+):
+
+    subscription = get_subscription(
+        user_id
+    )
+
+    if not subscription:
+        return False
+
+    return bool(
+        subscription.get(
+            "pro_setup_completed"
+        )
+    )
+
+
+# =========================================================
+# ПОМЕТИТЬ SETUP ЗАВЕРШЁННЫМ
+# =========================================================
+
+def mark_pro_setup_completed(
+    user_id
+):
+
+    now = _now_string()
+
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    cursor.execute(
+        """
+        UPDATE subscriptions
+
+        SET
+            pro_setup_completed = 1,
+            updated_at = ?
+
+        WHERE user_id = ?
+        """,
+        (
+            now,
+            user_id,
+        )
+    )
+
+    conn.commit()
+
+    changed = (
+        cursor.rowcount > 0
+    )
+
+    conn.close()
+
+    return changed
+
+
+# =========================================================
+# АКТИВАЦИЯ TEST PRO
 # =========================================================
 
 def activate_test_pro(
     user_id,
     days=30
 ):
-    """
-    Тестовая активация Pro.
 
-    Используется только на этапе разработки.
-    Оплаты здесь нет.
-    """
-
-    now = datetime.now()
+    now = _now()
 
     started_at = now.strftime(
-        "%Y-%m-%d %H:%M:%S"
+        DATE_FORMAT
     )
 
     expires_at = (
-        now + timedelta(days=days)
+        now + timedelta(
+            days=days
+        )
     ).strftime(
-        "%Y-%m-%d %H:%M:%S"
+        DATE_FORMAT
     )
 
     conn = get_connection()
@@ -185,7 +277,9 @@ def activate_test_pro(
 
     cursor.execute(
         """
-        SELECT id
+        SELECT
+            id,
+            pro_setup_completed
         FROM subscriptions
         WHERE user_id = ?
         LIMIT 1
@@ -232,10 +326,20 @@ def activate_test_pro(
                 started_at,
                 expires_at,
                 created_at,
-                updated_at
+                updated_at,
+                pro_setup_completed
             )
 
-            VALUES (?, 'pro', 'active', ?, ?, ?, ?)
+            VALUES (
+                ?,
+                'pro',
+                'active',
+                ?,
+                ?,
+                ?,
+                ?,
+                0
+            )
             """,
             (
                 user_id,
@@ -258,16 +362,11 @@ def activate_test_pro(
 # ПРИНУДИТЕЛЬНО ЗАВЕРШИТЬ PRO
 # =========================================================
 
-def expire_pro(user_id):
-    """
-    Принудительно переводит Pro в expired.
+def expire_pro(
+    user_id
+):
 
-    Ничего не удаляет.
-    """
-
-    now = datetime.now().strftime(
-        "%Y-%m-%d %H:%M:%S"
-    )
+    now = _now_string()
 
     conn = get_connection()
     cursor = conn.cursor()
@@ -282,6 +381,7 @@ def expire_pro(user_id):
             updated_at = ?
 
         WHERE user_id = ?
+
         AND plan = 'pro'
         """,
         (
@@ -293,18 +393,22 @@ def expire_pro(user_id):
 
     conn.commit()
 
-    changed = cursor.rowcount
+    changed = (
+        cursor.rowcount > 0
+    )
 
     conn.close()
 
-    return changed > 0
+    return changed
 
 
 # =========================================================
 # УДАЛИТЬ ПОДПИСКУ
 # =========================================================
 
-def delete_subscription(user_id):
+def delete_subscription(
+    user_id
+):
 
     conn = get_connection()
     cursor = conn.cursor()
@@ -312,7 +416,6 @@ def delete_subscription(user_id):
     cursor.execute(
         """
         DELETE FROM subscriptions
-
         WHERE user_id = ?
         """,
         (
@@ -321,4 +424,11 @@ def delete_subscription(user_id):
     )
 
     conn.commit()
+
+    changed = (
+        cursor.rowcount > 0
+    )
+
     conn.close()
+
+    return changed

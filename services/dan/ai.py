@@ -1,47 +1,31 @@
 import os
 
+from dotenv import load_dotenv
 from openai import OpenAI
 
 from services.dan.prompt import build_dan_prompt
 from services.dan.memory import remember
+from services.dan.context import get_context_for_level
+from database.dan.conversations import save_dan_message
 
+load_dotenv()
 
-# =========================================================
-# НАСТРОЙКИ AI
-# =========================================================
+AI_MODE = os.getenv("AI_MODE", "api").lower()
+AI_MODEL = os.getenv("AI_MODEL", "gpt-4o-mini")
+AI_MAX_TOKENS = int(os.getenv("AI_MAX_TOKENS", "350"))
+AI_TEMPERATURE = float(os.getenv("AI_TEMPERATURE", "0.7"))
 
-AI_MODE = os.getenv(
-    "AI_MODE",
-    "api",
-).lower()
-
-AI_MODEL = os.getenv(
-    "AI_MODEL",
-    "gpt-4o-mini",
-)
-
-AITUNNEL_API_KEY = os.getenv(
-    "AITUNNEL_API_KEY"
-)
-
+AITUNNEL_API_KEY = os.getenv("AITUNNEL_API_KEY")
 AITUNNEL_BASE_URL = os.getenv(
     "AITUNNEL_BASE_URL",
     "https://api.aitunnel.ru/v1",
 )
 
-
-# =========================================================
-# OPENAI-СОВМЕСТИМЫЙ CLIENT
-# =========================================================
-
 client = None
 
 if AI_MODE == "api":
-
     if not AITUNNEL_API_KEY:
-        raise RuntimeError(
-            "AITUNNEL_API_KEY не найден в .env"
-        )
+        raise RuntimeError("AITUNNEL_API_KEY не найден в .env")
 
     client = OpenAI(
         api_key=AITUNNEL_API_KEY,
@@ -49,178 +33,76 @@ if AI_MODE == "api":
     )
 
 
-# =========================================================
-# СОХРАНЕНИЕ ВАЖНЫХ ФАКТОВ
-# =========================================================
-
-def remember_from_message(
-    user_id,
-    user_message,
-):
-    """
-    Сохраняет только очевидные долгосрочные факты.
-
-    Это НЕ AI-анализ.
-    Никаких дополнительных запросов к модели.
-    """
-
-    message = user_message.strip()
-
+def remember_from_message(user_id, user_message):
+    """Очень консервативно сохраняет только явно выраженные долгосрочные факты."""
+    message = (user_message or "").strip()
     if not message:
         return
 
-    lower_message = message.lower()
+    lower = message.lower()
 
-    # -----------------------------------------------------
-    # ИМЯ
-    # -----------------------------------------------------
-
-    prefixes = (
+    name_prefixes = (
         "меня зовут ",
         "зови меня ",
         "мое имя ",
         "моё имя ",
     )
-
-    for prefix in prefixes:
-
-        if lower_message.startswith(prefix):
-
+    for prefix in name_prefixes:
+        if lower.startswith(prefix):
             value = message[len(prefix):].strip()
-
-            if value:
-                remember(
-                    user_id,
-                    "name",
-                    value,
-                    importance=10,
-                )
-
+            if value and len(value) <= 80:
+                remember(user_id, "name", value, importance=10)
             return
 
-    # -----------------------------------------------------
-    # ЦЕЛЬ
-    # -----------------------------------------------------
-
-    prefixes = (
-        "моя цель ",
-        "главная цель ",
-        "я хочу ",
-        "я хочу достичь ",
+    goal_prefixes = (
+        "моя цель — ",
+        "моя цель - ",
+        "моя цель: ",
+        "главная цель — ",
+        "главная цель - ",
+        "главная цель: ",
         "хочу достичь ",
+        "хочу добиться ",
     )
-
-    for prefix in prefixes:
-
-        if lower_message.startswith(prefix):
-
+    for prefix in goal_prefixes:
+        if lower.startswith(prefix):
             value = message[len(prefix):].strip()
-
-            if value:
-                remember(
-                    user_id,
-                    "goal",
-                    value,
-                    importance=9,
-                )
-
+            if value and len(value) <= 300:
+                remember(user_id, "goal", value, importance=9)
             return
 
-    # -----------------------------------------------------
-    # ПРЕДПОЧТЕНИЯ
-    # -----------------------------------------------------
-
-    prefixes = (
+    preference_prefixes = (
         "мне нравится ",
         "я люблю ",
-        "мне нравится, когда ",
-    )
-
-    for prefix in prefixes:
-
-        if lower_message.startswith(prefix):
-
-            value = message[len(prefix):].strip()
-
-            if value:
-                remember(
-                    user_id,
-                    "preference",
-                    value,
-                    importance=6,
-                )
-
-            return
-
-    # -----------------------------------------------------
-    # НЕ ЛЮБИТ
-    # -----------------------------------------------------
-
-    prefixes = (
-        "я не люблю ",
         "мне не нравится ",
-        "я ненавижу ",
+        "я не люблю ",
     )
-
-    for prefix in prefixes:
-
-        if lower_message.startswith(prefix):
-
+    for prefix in preference_prefixes:
+        if lower.startswith(prefix):
             value = message[len(prefix):].strip()
-
-            if value:
-                remember(
-                    user_id,
-                    "dislike",
-                    value,
-                    importance=7,
-                )
-
+            if value and len(value) <= 250:
+                key = "preference" if "не " not in prefix else "dislike"
+                remember(user_id, key, value, importance=6 if key == "preference" else 7)
             return
 
-
-# =========================================================
-# ОПРЕДЕЛЕНИЕ УРОВНЯ КОНТЕКСТА
-# =========================================================
 
 def detect_context_level(user_message):
     """
-    Локально определяет, насколько глубоко
-    Дэн должен использовать пользовательский контекст.
-
-    conversation:
-        обычный разговор / короткая реплика.
-
-    personal:
-        пользователь говорит о себе,
-        своей ситуации, целях, привычках,
-        состоянии или просит обычный совет.
-
-    analysis:
-        пользователь явно хочет глубокий разбор,
-        анализ поведения или персональную оценку.
+    Локальный маршрутизатор контекста.
+    Он не пытается понять смысл сообщения за модель —
+    только решает, насколько много данных стоит передать.
     """
-
-    text = user_message.strip().lower()
-
-    # =====================================================
-    # ANALYSIS
-    # =====================================================
+    text = (user_message or "").strip().lower()
 
     analysis_markers = (
         "проанализируй",
-        "проанализируй меня",
         "разбери меня",
         "разбери ситуацию",
-        "разберись во мне",
-        "разберись со мной",
         "что со мной происходит",
-        "что происходит со мной",
         "почему я постоянно",
         "почему я всегда",
         "почему я не могу",
         "почему я так делаю",
-        "почему у меня постоянно",
         "в чем я неправ",
         "в чём я неправ",
         "скажи честно",
@@ -231,302 +113,49 @@ def detect_context_level(user_message):
         "дай мне разбор",
         "сделай разбор",
         "разбор моей ситуации",
-        "разбери мою ситуацию",
     )
-
     if any(marker in text for marker in analysis_markers):
         return "analysis"
 
-    # =====================================================
-    # PERSONAL
-    # =====================================================
-
     personal_markers = (
-        "я не хочу",
-        "я хочу",
-        "я могу",
-        "я не могу",
-        "я не сделал",
-        "я сделал",
-        "я опять",
-        "я снова",
-        "я пропустил",
-        "я забил",
-        "я устал",
-        "я устал от",
-        "мне лень",
-        "мне сложно",
-        "мне тяжело",
-        "мне плохо",
-        "мне трудно",
-        "не могу заставить себя",
-        "ничего не хочу делать",
-        "ничего не хочется",
-        "у меня нет сил",
-        "у меня нет желания",
-        "у меня проблема",
-        "у меня проблемы",
-        "моя цель",
-        "мои цели",
-        "моя привычка",
-        "мои привычки",
-        "мой режим",
-        "мой сон",
-        "моя дисциплина",
-        "мое состояние",
-        "моё состояние",
-        "моя мотивация",
-        "помнишь",
-        "ты помнишь",
-        "как у меня",
-        "что у меня",
-        "что со мной",
-        "помоги мне",
+        "я ",
+        "мне ",
+        "у меня ",
+        "моя ",
+        "мои ",
+        "помоги",
+        "посоветуй",
+        "дай совет",
         "что мне делать",
         "как мне поступить",
-        "как мне",
-        "дай совет",
-        "посоветуй",
+        "помнишь",
+        "дисциплин",
+        "привыч",
+        "цель",
+        "режим",
+        "сон",
+        "стресс",
+        "энерг",
+        "настро",
     )
-
     if any(marker in text for marker in personal_markers):
         return "personal"
-
-    # =====================================================
-    # ОЧЕНЬ КОРОТКИЕ / БЫТОВЫЕ СООБЩЕНИЯ
-    # =====================================================
 
     return "conversation"
 
 
-# =========================================================
-# ПОЛУЧЕНИЕ НУЖНОГО КОНТЕКСТА
-# =========================================================
-
-def get_context_for_level(
-    user_id,
-    context_level,
-):
-    """
-    Получает только тот контекст,
-    который нужен текущему типу сообщения.
-
-    Это главный механизм экономии токенов.
-    """
-
-    from services.dan.context import (
-        get_user_profile,
-        get_user_habits_context,
-        get_current_state,
-        get_user_statistics,
-        get_memories_context,
-        get_conversation_context,
-    )
-
-    # =====================================================
-    # BASIC
-    # =====================================================
-    #
-    # Для обычного факта / бытовой фразы.
-    #
-    # Например:
-    #
-    # "ананас"
-    # "сегодня дождь"
-    # "я посмотрел фильм"
-    #
-    # Никакая пользовательская аналитика не нужна.
-    #
-
-    if context_level == "basic":
-
-        return {
-            "profile": {},
-            "goals": [],
-            "habits": [],
-            "habit_trends": {},
-            "current_state": {},
-            "statistics": {},
-            "memories": [],
-            "conversation": [],
-        }
-
-    # =====================================================
-    # CONVERSATION
-    # =====================================================
-    #
-    # Для живого общения.
-    #
-    # Нужна только небольшая история разговора.
-    #
-
-    if context_level == "conversation":
-
-        return {
-            "profile": {},
-            "goals": [],
-            "habits": [],
-            "habit_trends": {},
-            "current_state": {},
-            "statistics": {},
-            "memories": [],
-            "conversation": get_conversation_context(
-                user_id,
-                limit=6,
-            ),
-        }
-
-    # =====================================================
-    # PERSONAL
-    # =====================================================
-    #
-    # Пользователь говорит о себе.
-    #
-    # Даём Дэну персональный контекст,
-    # но без тяжёлой аналитики.
-    #
-
-    if context_level == "personal":
-
-        return {
-            "profile": get_user_profile(
-                user_id
-            ),
-
-            "goals": __import__(
-                "database.goals",
-                fromlist=["get_user_goals"],
-            ).get_user_goals(
-                user_id
-            ),
-
-            "habits": get_user_habits_context(
-                user_id
-            ),
-
-            "habit_trends": {},
-
-            "current_state": get_current_state(
-                user_id
-            ),
-
-            "statistics": {},
-
-            "memories": get_memories_context(
-                user_id,
-                limit=10,
-            ),
-
-            "conversation": get_conversation_context(
-                user_id,
-                limit=6,
-            ),
-        }
-
-    # =====================================================
-    # ANALYSIS
-    # =====================================================
-    #
-    # Полный контекст.
-    #
-    # Используется только тогда,
-    # когда пользователь действительно просит анализа.
-    #
-
-    if context_level == "analysis":
-
-        from services.dan.context import (
-            get_dan_context,
-        )
-
-        return get_dan_context(
-            user_id
-        )
-
-    # =====================================================
-    # FALLBACK
-    # =====================================================
-
-    return {
-        "profile": {},
-        "goals": [],
-        "habits": [],
-        "habit_trends": {},
-        "current_state": {},
-        "statistics": {},
-        "memories": [],
-        "conversation": [],
-    }
-
-
-# =========================================================
-# TEST MODE
-# =========================================================
-
-def test_ai_response(
-    context,
-    user_message,
-):
-
-    profile = context.get(
-        "profile",
-        {},
-    )
-
-    name = (
-        profile.get("name")
-        or "друг"
-    )
-
-    return (
-        f"{name}, я тебя услышал.\n\n"
-        "Расскажи чуть подробнее. "
-        "Мне важно понять, что именно "
-        "происходит сейчас, а не додумывать за тебя."
-    )
-
-
-# =========================================================
-# API MODE
-# =========================================================
-
-def api_ai_response(
-    prompt,
-    user_message,
-):
-
+def api_ai_response(prompt, user_message):
     if client is None:
-        raise RuntimeError(
-            "AI client не инициализирован"
-        )
+        raise RuntimeError("AI client не инициализирован")
 
-    print(
-        "\n================ AI DEBUG ================"
-    )
-
-    print(
-        "SYSTEM PROMPT CHARS:",
-        len(prompt),
-    )
-
-    print(
-        "USER MESSAGE CHARS:",
-        len(user_message),
-    )
-
-    print(
-        "SYSTEM PROMPT PREVIEW:",
-        prompt[:500],
-    )
-
-    print(
-        "==========================================\n"
-    )
+    print("\n================ DAN AI ================")
+    print("MODEL:", AI_MODEL)
+    print("CONTEXT PROMPT CHARS:", len(prompt))
+    print("USER MESSAGE CHARS:", len(user_message))
+    print("MAX TOKENS:", AI_MAX_TOKENS)
 
     response = client.chat.completions.create(
-
         model=AI_MODEL,
-
         messages=[
             {
                 "role": "system",
@@ -537,89 +166,60 @@ def api_ai_response(
                 "content": user_message,
             },
         ],
-
-        temperature=0.7,
-
-        max_tokens=500,
+        temperature=AI_TEMPERATURE,
+        max_tokens=AI_MAX_TOKENS,
     )
 
-    print(
-        "AI USAGE:",
-        response.usage,
-    )
-
-    content = (
-        response
-        .choices[0]
-        .message
-        .content
-    )
-
-    if not content:
-
-        raise RuntimeError(
-            "AI вернул пустой ответ"
+    usage = getattr(response, "usage", None)
+    if usage is not None:
+        print(
+            "DAN TOKENS:",
+            "prompt=", getattr(usage, "prompt_tokens", None),
+            "completion=", getattr(usage, "completion_tokens", None),
+            "total=", getattr(usage, "total_tokens", None),
         )
+
+    content = response.choices[0].message.content
+    if not content:
+        raise RuntimeError("AI вернул пустой ответ")
 
     return content.strip()
 
 
-# =========================================================
-# ОСНОВНАЯ ФУНКЦИЯ ДЭНА
-# =========================================================
-
-def get_dan_response(
-    user_id,
-    user_message,
-):
-
-    # -----------------------------------------------------
-    # 1. Сохраняем очевидные важные факты
-    # -----------------------------------------------------
-
-    remember_from_message(
-        user_id,
-        user_message,
+def test_ai_response(context, user_message):
+    profile = context.get("profile", {})
+    name = profile.get("name") or "друг"
+    return (
+        f"{name}, я тебя услышал. "
+        "Давай разберёмся по сути, без лишней воды."
     )
 
-    # -----------------------------------------------------
-    # 2. Определяем уровень контекста
-    # -----------------------------------------------------
 
-    context_level = detect_context_level(
-        user_message
-    )
+def get_dan_response(user_id, user_message):
+    """
+    Полный цикл одного сообщения.
 
-    print(
-        "\n========== DAN CONTEXT =========="
-    )
+    Важно: предыдущая история загружается ДО сохранения текущего сообщения,
+    поэтому текущая реплика не дублируется внутри prompt.
+    """
+    user_message = (user_message or "").strip()
+    if not user_message:
+        return ""
 
-    print(
-        "MESSAGE:",
-        user_message,
-    )
+    remember_from_message(user_id, user_message)
 
-    print(
-        "CONTEXT LEVEL:",
-        context_level,
-    )
+    context_level = detect_context_level(user_message)
 
-    print(
-        "=================================\n"
-    )
+    print("\n========== DAN CONTEXT ==========")
+    print("MESSAGE:", user_message)
+    print("CONTEXT LEVEL:", context_level)
+    print("=================================")
 
-    # -----------------------------------------------------
-    # 3. Получаем ТОЛЬКО нужный контекст
-    # -----------------------------------------------------
-
+    # История здесь ещё не содержит текущую реплику.
     context = get_context_for_level(
         user_id,
         context_level,
     )
-
-    # -----------------------------------------------------
-    # 4. Создаём prompt
-    # -----------------------------------------------------
 
     prompt = build_dan_prompt(
         context,
@@ -627,47 +227,36 @@ def get_dan_response(
         context_level=context_level,
     )
 
-    # -----------------------------------------------------
-    # 5. TEST MODE
-    # -----------------------------------------------------
+    # Сохраняем вход после формирования контекста.
+    save_dan_message(
+        user_id=user_id,
+        role="user",
+        message=user_message,
+    )
 
-    if AI_MODE == "test":
-
-        return test_ai_response(
-            context,
-            user_message,
+    try:
+        if AI_MODE == "test":
+            response = test_ai_response(context, user_message)
+        elif AI_MODE == "api":
+            response = api_ai_response(prompt, user_message)
+        else:
+            raise ValueError(
+                f"Неизвестный AI_MODE: {AI_MODE}"
+            )
+    except Exception as error:
+        print(
+            f"[DAN AI ERROR] {type(error).__name__}: {error}"
+        )
+        return (
+            "Сейчас у меня небольшая проблема с подключением. "
+            "Попробуй ещё раз через пару секунд."
         )
 
-    # -----------------------------------------------------
-    # 6. API MODE
-    # -----------------------------------------------------
+    if response:
+        save_dan_message(
+            user_id=user_id,
+            role="assistant",
+            message=response,
+        )
 
-    if AI_MODE == "api":
-
-        try:
-
-            return api_ai_response(
-                prompt,
-                user_message,
-            )
-
-        except Exception as error:
-
-            print(
-                f"[DAN AI ERROR] "
-                f"{type(error).__name__}: {error}"
-            )
-
-            return (
-                "Сейчас у меня небольшая проблема "
-                "с подключением. Дай мне пару секунд "
-                "и попробуй ещё раз."
-            )
-
-    # -----------------------------------------------------
-    # 7. НЕИЗВЕСТНЫЙ РЕЖИМ
-    # -----------------------------------------------------
-
-    raise ValueError(
-        f"Неизвестный AI_MODE: {AI_MODE}"
-    )
+    return response

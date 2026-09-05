@@ -8,6 +8,8 @@ from database.goals import (
 from database.habits import (
     get_user_habits,
     create_habit,
+    PRO_MAX_GOOD_HABITS,
+    PRO_MAX_BAD_HABITS,
 )
 
 from services.subscription import is_pro
@@ -499,6 +501,27 @@ def create_setup_habit(
         "weekdays",
         "custom",
     ):
+        return None
+
+    # -----------------------------------------------------
+    # ЛИМИТ ПРИВЫЧЕК PRO
+    # -----------------------------------------------------
+
+    existing_habits = get_user_habits(user_id)
+    same_type_count = sum(
+        1
+        for habit in existing_habits
+        if habit.get("habit_type") == habit_type
+        and habit.get("pro_status") != "frozen"
+    )
+
+    max_for_type = (
+        PRO_MAX_GOOD_HABITS
+        if habit_type == "good"
+        else PRO_MAX_BAD_HABITS
+    )
+
+    if same_type_count >= max_for_type:
         return None
 
     # -----------------------------------------------------

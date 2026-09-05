@@ -7,7 +7,6 @@ from telegram import (
 from telegram.ext import ContextTypes
 
 from database.goals import (
-    cleanup_phantom_menu_goal,
     get_user_goals_for_plan,
     get_user_goals,
     FREE_MAX_GOALS,
@@ -60,8 +59,6 @@ async def open_goal_edit(
     await query.answer()
 
     user_id = update.effective_user.id
-
-    cleanup_phantom_menu_goal(user_id)
 
     pro_active = bool(
         user_has_pro(user_id)

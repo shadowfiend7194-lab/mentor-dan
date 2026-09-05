@@ -196,10 +196,7 @@ async def open_habit(
     if not query:
         return
 
-    try:
-        await query.answer()
-    except Exception:
-        pass
+    await query.answer()
 
     try:
 
@@ -607,10 +604,7 @@ async def habit_frequency_callback(
     if not query:
         return
 
-    try:
-        await query.answer()
-    except Exception:
-        pass
+    await query.answer()
 
     data = query.data
 
@@ -805,8 +799,11 @@ async def update_frequency(
     context.user_data.pop("habit_edit_state", None)
 
     # Если изменение произошло по inline-кнопке, обновляем ту же карточку.
-    # Callback уже подтверждён в habit_frequency_callback().
     if update.callback_query:
+        try:
+            await update.callback_query.answer("📅 Периодичность обновлена.")
+        except Exception:
+            pass
         from handlers.goal.habits import open_habit
         await open_habit(update, context)
         return
@@ -937,14 +934,13 @@ async def save_habit_name(
         parse_mode="HTML"
     )
 
-    from handlers.goal.pro_habit_edit import (
-        show_habit_card_after_text
+    from handlers.goal.screen import (
+        show_goal
     )
 
-    await show_habit_card_after_text(
+    await show_goal(
         update,
-        context,
-        habit_id
+        context
     )
 
     return True

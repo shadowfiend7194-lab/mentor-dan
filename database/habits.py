@@ -4,6 +4,16 @@ from database.connection import get_connection
 
 
 # =========================================================
+# ЛИМИТЫ ПРИВЫЧЕК
+# =========================================================
+
+FREE_MAX_GOOD_HABITS = 1
+FREE_MAX_BAD_HABITS = 1
+PRO_MAX_GOOD_HABITS = 3
+PRO_MAX_BAD_HABITS = 3
+
+
+# =========================================================
 # ДНИ НЕДЕЛИ
 # =========================================================
 
@@ -276,6 +286,29 @@ def get_user_habits(
         )
 
     return habits
+
+
+def get_user_habits_for_plan(
+    user_id,
+    include_frozen=False,
+):
+    """
+    Возвращает привычки с учётом состояния PRO.
+
+    include_frozen=False — только доступные привычки.
+    include_frozen=True — все активные привычки, включая замороженные.
+    """
+
+    habits = get_user_habits(user_id)
+
+    if include_frozen:
+        return habits
+
+    return [
+        habit
+        for habit in habits
+        if habit.get("pro_status") != "frozen"
+    ]
 
 
 # =========================================================

@@ -1,0 +1,25 @@
+BLOCK 9 — DAN CORE REWORK
+
+Replace:
+- services/dan/ai.py
+- services/dan/context.py
+- services/dan/personality.py
+- services/dan/prompt.py
+- services/dan/history.py
+- handlers/dan/router.py
+- services/dan/pro_weekly_report.py
+
+Optional .env tuning:
+AI_MODEL=gpt-4o-mini
+AI_MAX_TOKENS=350
+AI_TEMPERATURE=0.7
+
+Important:
+- Do not delete dan.db.
+- Do not delete .env or .git.
+- Current message is no longer duplicated in Dan context.
+- Dan personality is now actually connected to the prompt.
+- Conversation history uses the real `message` DB column.
+- Token usage is printed for every API call.
+- No separate reasoning-token mode is currently implemented; the current AITunnel path uses standard chat completions.
+- The report rhythm calculation is corrected from an extra *100 conversion.
